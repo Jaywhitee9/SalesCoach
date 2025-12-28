@@ -1,0 +1,37 @@
+require('dotenv').config();
+const fastify = require('fastify')({ logger: true });
+const path = require('path');
+
+// Plugins
+fastify.register(require('@fastify/formbody'));
+fastify.register(require('@fastify/websocket'));
+
+// Static Files (Serve Client)
+fastify.register(require('@fastify/static'), {
+    root: path.join(__dirname, '../client/dist'),
+    prefix: '/',
+});
+
+// Routes
+fastify.register(require('./routes/twilio-handler'));
+fastify.register(require('./routes/api-handler'));
+fastify.register(require('./routes/token-handler'));
+
+// Health Check
+fastify.get('/health', async (request, reply) => {
+    return { status: 'ok', timestamp: new Date().toISOString() };
+});
+
+// Start Server
+const start = async () => {
+    try {
+        const port = process.env.PORT || 3000;
+        await fastify.listen({ port, host: '0.0.0.0' });
+        console.log(`Server listening on ${fastify.server.address().port}`);
+    } catch (err) {
+        fastify.log.error(err);
+        process.exit(1);
+    }
+};
+
+start();
