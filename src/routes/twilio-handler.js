@@ -3,6 +3,7 @@ const SonioxService = require('../services/soniox-service');
 const CoachingEngine = require('../services/coaching-engine');
 const TenantStore = require('../services/tenant-store');
 const supabase = require('../lib/supabase'); // NEW: Supabase Client
+const { v4: uuidv4 } = require('uuid');
 
 async function registerTwilioRoutes(fastify) {
 
@@ -10,6 +11,13 @@ async function registerTwilioRoutes(fastify) {
     const voiceHandler = async (request, reply) => {
         const baseUrl = process.env.PUBLIC_URL || `https://${request.headers.host}`;
         const wsUrl = baseUrl.replace('https://', 'wss://').replace('http://', 'ws://');
+
+        console.log('------------------------------------------');
+        console.log('[Twilio-Handler] /voice HIT. Method:', request.method);
+        console.log('[Twilio-Handler] Headers:', JSON.stringify(request.headers));
+        console.log('[Twilio-Handler] Body:', JSON.stringify(request.body));
+        console.log('[Twilio-Handler] Query:', JSON.stringify(request.query));
+        console.log('------------------------------------------');
 
         // Extract Standard Twilio Params + Custom Params (from device.connect)
         const { To, CallSid, agent_id, lead_id, target_number } = request.body || request.query;
@@ -19,16 +27,36 @@ async function registerTwilioRoutes(fastify) {
         // -- ACTION: Create Call Record in DB --
         if (CallSid && agent_id && lead_id && agent_id !== 'unknown') {
             try {
+                // PHASE 3: Fetch organization_id from agent's profile
+                const { data: profile, error: profileError } = await supabase
+                    .from('profiles')
+                    .select('organization_id')
+                    .eq('id', agent_id)
+                    .single();
+
+                if (profileError || !profile?.organization_id) {
+                    console.error('[DB] CRITICAL: Cannot determine organization_id for call', {
+                        agent_id,
+                        lead_id,
+                        CallSid,
+                        error: profileError?.message
+                    });
+                    throw new Error(`Missing organization_id for agent ${agent_id}`);
+                }
+
                 const { error } = await supabase.from('calls').insert({
-                    id: CallSid,
+                    id: uuidv4(),
                     agent_id: agent_id,
                     lead_id: lead_id,
+                    organization_id: profile.organization_id,
+                    org_id: profile.organization_id, // Fix: Map to org_id as expected by DB
                     status: 'in-progress',
-                    direction: 'outbound', // Assuming outbound for now based on browser start
+                    direction: 'outbound',
+                    recording_url: `sid:${CallSid}`, // Temp storage for retrieval
                     created_at: new Date().toISOString()
                 });
                 if (error) console.error('[DB] Failed to insert call:', error.message);
-                else console.log('[DB] Call record created:', CallSid);
+                else console.log('[DB] Call record created:', CallSid, 'org:', profile.organization_id);
             } catch (err) {
                 console.error('[DB] Error inserting call:', err);
             }
@@ -54,7 +82,8 @@ async function registerTwilioRoutes(fastify) {
             const callDirection = (destination && destination !== process.env.TWILIO_PHONE_NUMBER) ? 'outbound' : 'inbound';
 
             // PASS METADATA TO WEBSOCKET VIA URL PARAMS
-            const streamUrl = `${wsUrl}/twilio-stream?direction=${callDirection}&agentId=${agent_id}&leadId=${lead_id}`;
+            // Adding leg=agent to identify this stream is on the agent's side
+            const streamUrl = `${wsUrl}/twilio-stream?direction=${callDirection}&agentId=${agent_id}&leadId=${lead_id}&leg=agent`;
 
             const start = response.start();
             start.stream({
@@ -65,16 +94,24 @@ async function registerTwilioRoutes(fastify) {
             // 3. DIAL LOGIC
             // Normalize "To" number to E.164 if dealing with Israeli numbers
             let targetNumber = destination;
+
             if (targetNumber) {
-                // Remove non-digits
+                // Remove all non-digit characters
                 let cleanNumber = targetNumber.replace(/\D/g, '');
-                // If starts with 0 and is long enough, assume IL local
-                if (targetNumber.startsWith('0') && cleanNumber.length >= 9) {
-                    targetNumber = '+972' + cleanNumber.substring(1);
-                } else if (!targetNumber.startsWith('+') && cleanNumber.length >= 7) {
-                    // Try to be smart? Or just let it fail if not +
-                    // Let's assume input might be 501234567 -> +972501234567 if they omitted 0? 
-                    // Safer to just handle the standard '05...' case.
+
+                // ISRAEL E.164 LOGIC:
+                // If it starts with '0' (e.g. 052...), remove 0 and add +972
+                if (cleanNumber.startsWith('0')) {
+                    cleanNumber = cleanNumber.substring(1);
+                    targetNumber = `+972${cleanNumber}`;
+                }
+                // If it already doesn't start with +, add + (assuming it's full number but missing +)
+                // But safer to only touch if we are sure. For now, just handling the 0 case is P0.
+                else if (!targetNumber.startsWith('+')) {
+                    // If it's 9 digits starting with 5, likely IL mobile without 0 -> +972
+                    if (cleanNumber.length === 9 && cleanNumber.startsWith('5')) {
+                        targetNumber = `+972${cleanNumber}`;
+                    }
                 }
             }
 
@@ -146,32 +183,33 @@ async function registerTwilioRoutes(fastify) {
                  outboundSpeaker = 'agent';
             }
         */
-        const resolveRole = (track, callDirection) => {
-            // Inbound Call: 'inbound' track = Customer (Caller), 'outbound' track = Agent (Say/Play)
-            if (callDirection === 'inbound') {
-                return track === 'inbound' ? 'customer' : 'agent';
-            }
-            // Outbound Call: 'inbound' track = Agent (Caller), 'outbound' = Customer (Callee)?
-            // NOTE: This depends heavily on how Twilio streams are forked. 
-            // Typically 'inbound' is the audio received by Twilio. 
-            // On outbound call, Twilio initiates. 'Inbound' audio comes from the person picked up?
-            // User's previous code had inverted logic for outbound. We preserve it but log it explicitly.
-            else {
+        const resolveRole = (track, leg) => {
+            // P0 Fix: Role Mapping - EMPIRICALLY VERIFIED
+            // User tested: "טלפון" spoken from PHONE showed as track=outbound role=agent
+            // But PHONE = Customer!
+            // So: outbound -> customer, inbound -> agent
+            // (This is the OPPOSITE of what Twilio docs suggest, but it works!)
+            if (leg === 'agent') {
                 return track === 'inbound' ? 'agent' : 'customer';
             }
+            // Fallback - same logic
+            return track === 'inbound' ? 'agent' : 'customer';
         };
 
         ws.on('message', async (message) => {
             try {
                 const data = JSON.parse(message);
 
-                // Extract direction from the WebSocket request URL once
-                const urlParams = new URLSearchParams(req.url.split('?')[1]);
-                const callDirection = urlParams.get('direction') || 'inbound';
-                const agentId = urlParams.get('agentId') || 'system';
-                const leadId = urlParams.get('leadId') || 'unknown';
+                // Extract direction from WebSocket request
+                // In Fastify, use req.query for WebSocket query params
+                const queryParams = req.query || {};
+                const callDirection = queryParams.direction || 'inbound';
+                const agentId = queryParams.agentId || 'system';
+                const leadId = queryParams.leadId || 'unknown';
+                const leg = queryParams.leg || 'agent'; // Default to 'agent' since we set leg=agent in TwiML
 
                 if (data.event === 'start') {
+                    console.log('[Twilio] Stream START event received', data.start);
                     callSid = data.start.callSid;
                     streamSid = data.start.streamSid;
 
@@ -183,11 +221,14 @@ async function registerTwilioRoutes(fastify) {
                         if (agentId !== 'undefined') context.agent.agentId = agentId;
                         if (leadId !== 'undefined') context.customLeadId = leadId;
 
-                        console.log(`[Twilio] Stream started for CallSid: ${callSid} [Agent: ${agentId}, Lead: ${leadId}]`);
+                        console.log(`[Twilio] Stream started for CallSid: ${callSid} [Agent: ${agentId}, Lead: ${leadId}, Leg: ${leg}]`);
                         console.log(`[Twilio] Stream Direction: ${callDirection}`);
 
                         // Initialize Call State
                         const call = CallManager.getCall(callSid, context);
+                        if (!call) {
+                            console.error('[Twilio] CRITICAL: CallManager returned null for new call!');
+                        }
                     } catch (e) {
                         console.error(`[Twilio] Failed to resolve context: ${e.message}`);
                         ws.close();
@@ -198,21 +239,29 @@ async function registerTwilioRoutes(fastify) {
                     const track = data.media.track;
                     const payload = data.media.payload;
 
-                    if (callSid) {
-                        const call = CallManager.getCall(callSid);
+                    if (!callSid) return;
 
-                        // Resolve Role
-                        const role = resolveRole(track, callDirection);
+                    const call = CallManager.getCall(callSid);
+                    if (!call) return; // specific handling if call missing
 
-                        // Ensure session exists
-                        if (!call.sonioxSockets[role]) {
-                            call.sonioxSockets[role] = SonioxService.createSession(callSid, role, (text, isFinal) => {
-                                // Pass resolved role props explicitly
-                                handleTranscript(callSid, role, text, isFinal, track, callDirection);
-                            });
-                        }
-                        call.sonioxSockets[role].sendAudio(Buffer.from(payload, 'base64'));
+                    // DEBUG: Log first packet per track
+                    if (!call._debugTracks) call._debugTracks = new Set();
+                    if (!call._debugTracks.has(track)) {
+                        console.log(`[Twilio-Debug] First Media Packet for track: ${track} (CallSid: ${callSid})`);
+                        call._debugTracks.add(track);
                     }
+
+                    // Resolve Role (Use LEG)
+                    const role = resolveRole(track, leg);
+
+                    // Ensure session exists
+                    if (!call.sonioxSockets[role]) {
+                        call.sonioxSockets[role] = SonioxService.createSession(callSid, role, (text, isFinal) => {
+                            // Pass resolved role props explicitly
+                            handleTranscript(callSid, role, text, isFinal, track, callDirection, leg);
+                        });
+                    }
+                    call.sonioxSockets[role].sendAudio(Buffer.from(payload, 'base64'));
 
                 } else if (data.event === 'stop') {
                     console.log(`[Twilio] Stream stopped for ${callSid}`);
@@ -231,25 +280,32 @@ async function registerTwilioRoutes(fastify) {
     });
 
     // Helper to process transcripts
-    const handleTranscript = async (callSid, role, text, isFinal, rawTrack, callDirection) => {
+    const handleTranscript = async (callSid, role, text, isFinal, rawTrack, callDirection, leg) => {
         try {
             // EXPLICT ROLE VERIFICATION LOG
-            console.log("[Role-Mapping] Transcript", {
-                callId: callSid,
-                twilioDirection: callDirection,
-                track: rawTrack,
-                role: role,
-                isFinal: isFinal,
-                text: text.substring(0, 60)
-            });
+            console.log(`[Role-Mapping] callSid=${callSid} leg=${leg} track=${rawTrack} resolved=${role} text="${text.substring(0, 50)}..."`);
+
 
             // 1. Update State & Broadcast to UI (Transcript)
             CallManager.addTranscript(callSid, role, text, isFinal);
 
-            // Broadcast to UI
+            // FORCE_SWAP_ROLES: ENV override for quick role swap testing
+            let finalRole = role;
+            if (process.env.FORCE_SWAP_ROLES === '1') {
+                finalRole = (role === 'agent') ? 'customer' : 'agent';
+                console.log(`[FORCE_SWAP] Swapped ${role} -> ${finalRole}`);
+            }
+
+            // Generate stable segmentId for monotonic tracking
+            const segmentId = `${finalRole}-${Math.floor(Date.now() / 3000)}`;
+
+            // Broadcast to UI with ALL relevant info
             CallManager.broadcastToFrontend(callSid, {
                 type: 'transcript',
-                role: role,
+                role: finalRole,
+                track: rawTrack || null,
+                leg: leg || null,
+                segmentId: segmentId,
                 text: text,
                 isFinal: isFinal,
                 timestamp: Date.now()

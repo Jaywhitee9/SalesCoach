@@ -38,8 +38,15 @@ CREATE POLICY "Managers can see all profiles" ON public.profiles
   FOR SELECT USING ( is_manager() );
 
 -- LEADS
+-- LEADS
 CREATE POLICY "Managers see all leads" ON public.leads
   FOR SELECT USING ( is_manager() );
+
+CREATE POLICY "Managers can update all leads" ON public.leads
+  FOR UPDATE USING ( is_manager() );
+
+CREATE POLICY "Reps can update own leads" ON public.leads
+  FOR UPDATE USING ( auth.uid() = owner_id );
 
 -- CALLS
 CREATE POLICY "Managers see all calls" ON public.calls

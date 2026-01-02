@@ -14,13 +14,13 @@ class SonioxService {
         // track is 'inbound' (customer) or 'outbound' (agent)
 
         // Config as requested - HEBREW OPTIMIZED
-        // If provided via env, use it, otherwise default to Hebrew Low Latency
-        const model = process.env.SONIOX_MODEL || "he_v2_lowlatency";
+        // Using Universal v3 model found via API query
+        const model = process.env.SONIOX_MODEL || "stt-rt-v3";
 
         // Config matching Soniox v3 Real-time docs
         const config = {
             api_key: this.apiKey,
-            model: model, // Using Hebrew model
+            model: model,
 
             // Audio format
             audio_format: "mulaw",
@@ -28,6 +28,7 @@ class SonioxService {
             num_channels: 1,
 
             // Languages: Hebrew only (Strict)
+            // v3 uses hints to guide the universal model
             language_hints: ["he"],
             enable_language_identification: false, // Turn off ID to force Hebrew focus
 
@@ -49,12 +50,30 @@ class SonioxService {
         let lastPartialText = "";
         let lastBroadcastTime = 0;
 
+        // Audio Buffer for pre-connection packets
+        let audioBuffer = [];
+
         ws.on('open', () => {
             console.log(`[Soniox] Opening stream for ${callSid} (${track}) using model: ${config.model}`);
             ws.send(JSON.stringify(config));
+
+            // Flush buffer
+            if (audioBuffer.length > 0) {
+                console.log(`[Soniox] Flushing ${audioBuffer.length} buffered audio packets for ${callSid} (${track})`);
+                audioBuffer.forEach(packet => {
+                    if (ws.readyState === WebSocket.OPEN) ws.send(packet);
+                });
+                audioBuffer = [];
+            } else {
+                console.log(`[Soniox] No audio buffered for ${callSid} (${track})`);
+            }
         });
 
+        // ... existing 'message' handler ...
+
         ws.on('message', (data) => {
+            // ... existing code ...
+            // (Copy existing message handler entirely or ensure checking line numbers closely)
             try {
                 const response = JSON.parse(data);
 
@@ -65,64 +84,38 @@ class SonioxService {
 
                 if (!response.tokens) return;
 
-                // Separate Final and Non-Final tokens
                 const finalTokens = response.tokens.filter(t => t.is_final);
                 const nonFinalTokens = response.tokens.filter(t => !t.is_final);
 
-                // 1. PROCESS FINAL UTTERANCE
                 if (finalTokens.length > 0) {
                     let finalText = finalTokens.map(t => t.text).join("").replace(/<end>/gi, '').trim();
-
                     if (finalText && finalText.length > 0) {
-                        // Dedup: Ignore if identical to last final
-                        if (finalText === lastFinalText) {
-                            console.log(`[Coach-Transcript] Skipped duplicate final: "${finalText.slice(0, 20)}..."`);
-                            return;
-                        }
-
+                        if (finalText === lastFinalText) { return; }
                         lastFinalText = finalText;
-                        lastPartialText = ""; // Reset partial tracking
-
-                        console.log("[Coach-Transcript] Outgoing FINAL", {
-                            callId: callSid,
-                            role: track, // 'inbound' or 'outbound'
-                            text: finalText.slice(0, 50)
-                        });
-
+                        lastPartialText = "";
+                        console.log("[Coach-Transcript] Outgoing FINAL", { callId: callSid, role: track, text: finalText.slice(0, 50) });
                         onTranscript(finalText, true);
                     }
                 }
 
-                // 2. PROCESS PARTIAL UTTERANCE
                 if (nonFinalTokens.length > 0) {
                     let partialText = nonFinalTokens.map(t => t.text).join("").replace(/<end>/gi, '').trim();
 
+                    // DEBUG: Check for excessive duplication
+                    // if (partialText.length > 50) console.log(`[Soniox-Debug] Raw Partial: "${partialText}"`);
+
                     if (partialText && partialText.length > 0) {
-                        // Dedup: Ignore if identical to last partial
                         if (partialText === lastPartialText) return;
-
-                        // Rate Limit: Only 1 partial per 100ms per role
-                        // (Optional, keeps UI fresher but cheaper)
-                        // const now = Date.now();
-                        // if (now - lastBroadcastTime < 100) return;
-                        // lastBroadcastTime = now;
-
                         lastPartialText = partialText;
-
-                        // We check confidence here? Soniox tokens have confidence?
-                        // If we want to filter low confidence partials:
-                        // const avgConf = nonFinalTokens.reduce((sum, t) => sum + (t.confidence || 0), 0) / nonFinalTokens.length;
-                        // if (avgConf < 0.6) return; // Example
-
                         onTranscript(partialText, false);
                     }
                 }
-
             } catch (e) {
                 console.error(`[Soniox] Error parsing message for ${callSid}:`, e);
             }
         });
 
+        // ... existing 'error' and 'close' handlers ...
         ws.on('error', (err) => {
             console.error(`[Soniox] Error for ${callSid} (${track}):`, err.message);
         });
@@ -135,6 +128,8 @@ class SonioxService {
             sendAudio: (audioPayload) => {
                 if (ws.readyState === WebSocket.OPEN) {
                     ws.send(audioPayload);
+                } else if (ws.readyState === WebSocket.CONNECTING) {
+                    audioBuffer.push(audioPayload);
                 }
             },
             close: () => {

@@ -34,15 +34,41 @@ Push for the close. Keep advice in English.`
     }
 };
 
+// Real Agent IDs from Supabase profiles table
 const AGENTS = {
-    'ag_1': { agentId: 'ag_1', accountId: 'acc_DemoCorp', name: 'Alon Coin' },
-    'ag_2': { agentId: 'ag_2', accountId: 'acc_SalesPro', name: 'John Doe' }
+    // Primary agent - a@a.com
+    '21e26622-06f8-459b-b812-36414754d5e9': {
+        agentId: '21e26622-06f8-459b-b812-36414754d5e9',
+        accountId: 'acc_DemoCorp',
+        name: 'Alon Coin',
+        organizationId: '2633560c-d5f0-4eee-bd34-6b1c5b16faa3'
+    },
+    // rep@salesflow.ai
+    'c165a009-76e4-4c4f-a817-78f73cef2ba4': {
+        agentId: 'c165a009-76e4-4c4f-a817-78f73cef2ba4',
+        accountId: 'acc_DemoCorp',
+        name: 'Sales Rep',
+        organizationId: '2633560c-d5f0-4eee-bd34-6b1c5b16faa3'
+    },
+    // manager@salesflow.ai
+    'd97c0deb-8ef6-4b7e-8fa3-5d1ea442ae02': {
+        agentId: 'd97c0deb-8ef6-4b7e-8fa3-5d1ea442ae02',
+        accountId: 'acc_DemoCorp',
+        name: 'Manager',
+        organizationId: '2633560c-d5f0-4eee-bd34-6b1c5b16faa3'
+    },
+    // Legacy fallback
+    'system': {
+        agentId: '21e26622-06f8-459b-b812-36414754d5e9',
+        accountId: 'acc_DemoCorp',
+        name: 'System (Default)',
+        organizationId: '2633560c-d5f0-4eee-bd34-6b1c5b16faa3'
+    }
 };
 
-// Deterministic Mapping: "Whenever calls come to THIS number, it's THIS agent/account"
+// Default mapping - all calls go to primary agent
 const PHONE_MAPPING = {
-    '+1234567890': 'ag_1',
-    'default': 'ag_1'
+    'default': '21e26622-06f8-459b-b812-36414754d5e9'
 };
 
 class TenantStore {

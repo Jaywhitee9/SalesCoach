@@ -119,6 +119,18 @@ class CallManager extends EventEmitter {
         text,
         timestamp: Date.now()
       });
+
+      // PERSISTENCE (P0)
+      if (call.leadId && call.leadId !== 'unknown') {
+        DBService.saveMessage({
+          callId: callSid,
+          leadId: call.leadId,
+          role: uiRole,
+          text: text,
+          isFinal: true
+        });
+      }
+
       this.emit('transcript_final', { callSid, role: uiRole, text });
     }
     // Note: Broadcasting is now handled ONLY in twilio-handler.js to avoid duplicates

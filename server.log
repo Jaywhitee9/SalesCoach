@@ -1,0 +1,6 @@
+
+> sales-coach@1.0.0 start
+> node src/server.js
+
+[dotenv@17.2.3] injecting env (16) from .env -- tip: ⚙️  enable debug logging with { debug: true }
+{"level":50,"time":1767113407590,"pid":20688,"hostname":"h-MacBook-Pro-sl-wmr.local","err":{"type":"Error","message":"listen EADDRINUSE: address already in use 0.0.0.0:3000","stack":"Error: listen EADDRINUSE: address already in use 0.0.0.0:3000\n    at Server.setupListenHandle [as _listen2] (node:net:1940:16)\n    at listenInCluster (node:net:1997:12)\n    at node:net:2206:7\n    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)","code":"EADDRINUSE","errno":-48,"syscall":"listen","address":"0.0.0.0","port":3000},"msg":"listen EADDRINUSE: address already in use 0.0.0.0:3000"}

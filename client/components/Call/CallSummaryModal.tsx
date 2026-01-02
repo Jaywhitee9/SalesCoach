@@ -1,0 +1,383 @@
+
+import React, { useState, useEffect } from 'react';
+import {
+  X,
+  CheckCircle2,
+  Calendar,
+  Clock,
+  FileText,
+  Sparkles,
+  ThumbsDown,
+  Loader2,
+  Save,
+  MessageSquare
+} from 'lucide-react';
+import { Button } from '../Common/Button';
+import { DateTimePicker } from '../Common/DateTimePicker';
+import { useCall } from '../../src/context/CallContext';
+import { Message } from '../../types';
+import { supabase } from '../../src/lib/supabaseClient';
+
+interface CallSummaryModalProps {
+  leadName: string;
+  leadId: string;
+  callDuration: number; // seconds
+  transcripts: Message[];
+}
+
+export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
+  leadName: propLeadName,
+  leadId,
+  callDuration,
+  transcripts
+}) => {
+  const {
+    showSummaryModal,
+    dismissSummaryModal,
+    summaryStatus,
+    callSummary,
+    callSessionId
+  } = useCall();
+
+  const [activeTab, setActiveTab] = useState<'summary' | 'transcript'>('summary');
+  const [outcome, setOutcome] = useState<string | null>(null);
+  const [followUpDate, setFollowUpDate] = useState<Date | null>(() => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(10, 0, 0, 0);
+    return tomorrow;
+  });
+  const [followUpNotes, setFollowUpNotes] = useState('');
+  const [notRelevantReason, setNotRelevantReason] = useState('');
+  const [showFollowUpForm, setShowFollowUpForm] = useState(false);
+  const [showNotRelevantForm, setShowNotRelevantForm] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Lead name state - needs to reset when modal opens with new lead
+  const [leadName, setLeadName] = useState(propLeadName);
+
+  // Reset all form state when modal opens (new call)
+  useEffect(() => {
+    if (showSummaryModal) {
+      // Reset form state for new summary
+      setOutcome(null);
+      setFollowUpNotes('');
+      setNotRelevantReason('');
+      setShowFollowUpForm(false);
+      setShowNotRelevantForm(false);
+
+      // Reset lead name to prop value first, will fetch if needed
+      setLeadName(propLeadName);
+
+      // Set follow-up date to tomorrow 10am
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(10, 0, 0, 0);
+      setFollowUpDate(tomorrow);
+    }
+  }, [showSummaryModal]);
+
+  // Fetch real lead name from database
+  useEffect(() => {
+    const fetchLeadName = async () => {
+      // Only fetch if we have a leadId and modal is open
+      if (leadId && showSummaryModal) {
+        const { data, error } = await supabase
+          .from('leads')
+          .select('name')
+          .eq('id', leadId)
+          .single();
+
+        if (data?.name && !error) {
+          setLeadName(data.name);
+        }
+      }
+    };
+    fetchLeadName();
+  }, [leadId, showSummaryModal]);
+
+  if (!showSummaryModal) return null;
+
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const outcomes = [
+    { id: 'deal_closed', label: 'עסקה נסגרה', icon: CheckCircle2, color: 'bg-emerald-100 text-emerald-700 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-400' },
+    { id: 'follow_up', label: 'המשך טיפול', icon: Clock, color: 'bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/30 dark:text-blue-400' },
+    { id: 'not_relevant', label: 'לא רלוונטי', icon: ThumbsDown, color: 'bg-rose-100 text-rose-600 border-rose-300 dark:bg-rose-900/30 dark:text-rose-400' },
+  ];
+
+  const handleOutcomeClick = (id: string) => {
+    setOutcome(id);
+    setShowFollowUpForm(id === 'follow_up');
+    setShowNotRelevantForm(id === 'not_relevant');
+  };
+
+  const handleSave = async () => {
+    if (!outcome) return;
+
+    setIsSaving(true);
+    console.log('[Summary] Saving outcome:', outcome, { followUpDate, followUpNotes, callSessionId, leadId });
+
+    try {
+      // Save to backend API
+      const response = await fetch(`/api/leads/${leadId}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: outcome,
+          followUpAt: followUpDate ? followUpDate.toISOString() : null,
+          notes: outcome === 'not_relevant' ? notRelevantReason : (followUpNotes || null),
+          callSessionId,
+          summaryJson: callSummary
+        })
+      });
+
+      if (!response.ok) {
+        console.error('[Summary] Failed to save:', await response.text());
+      } else {
+        console.log('[Activity] inserted:', { type: outcome, leadId });
+      }
+    } catch (err) {
+      console.error('[Summary] Save error:', err);
+    }
+
+    setIsSaving(false);
+    dismissSummaryModal();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      {/* Backdrop */}
+      <div
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity"
+        onClick={dismissSummaryModal}
+      />
+
+      {/* Modal Content */}
+      <div className="relative w-full max-w-2xl bg-white dark:bg-slate-950 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-300 border border-slate-200 dark:border-slate-800">
+
+        {/* Header */}
+        <div className="bg-slate-50 dark:bg-slate-900/50 p-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-start">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+              סיכום שיחה
+            </h2>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+              עם {leadName} • {formatDuration(callDuration)} דקות
+            </p>
+          </div>
+
+          {/* AI Score */}
+          {summaryStatus === 'ready' && callSummary?.score && (
+            <div className="flex flex-col items-end">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">ציון AI</span>
+              <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-3 py-1 rounded-full shadow-sm">
+                <Sparkles className="w-3.5 h-3.5 text-brand-500 fill-brand-500" />
+                <span className="font-bold text-slate-900 dark:text-white">{callSummary.score}</span>
+                <span className="text-xs text-slate-400">/ 100</span>
+              </div>
+            </div>
+          )}
+
+          <button onClick={dismissSummaryModal} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full">
+            <X className="w-5 h-5 text-slate-400" />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-slate-200 dark:border-slate-800">
+          <button
+            onClick={() => setActiveTab('summary')}
+            className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'summary'
+              ? 'text-brand-600 border-b-2 border-brand-600 bg-brand-50/50 dark:bg-brand-900/10'
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+          >
+            <Sparkles className="w-4 h-4" />
+            סיכום
+          </button>
+          <button
+            onClick={() => setActiveTab('transcript')}
+            className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'transcript'
+              ? 'text-brand-600 border-b-2 border-brand-600 bg-brand-50/50 dark:bg-brand-900/10'
+              : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            תמלול ({transcripts.length})
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-5">
+
+          {activeTab === 'summary' && (
+            <>
+              {/* AI Summary Section */}
+              <div className="relative group">
+                <div className="absolute -inset-0.5 bg-gradient-to-r from-brand-500 to-purple-600 rounded-xl opacity-20 group-hover:opacity-30 transition duration-500 blur"></div>
+                <div className="relative bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800">
+                  <div className="flex justify-between items-center mb-3">
+                    <label className="text-xs font-bold text-brand-600 dark:text-brand-400 flex items-center gap-1.5 uppercase tracking-wide">
+                      <Sparkles className="w-3 h-3" /> סיכום AI
+                    </label>
+                    {summaryStatus === 'generating' && (
+                      <span className="text-xs text-slate-400 flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        מייצר סיכום...
+                      </span>
+                    )}
+                  </div>
+
+                  {summaryStatus === 'generating' ? (
+                    <div className="space-y-2 animate-pulse">
+                      <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full"></div>
+                      <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-5/6"></div>
+                      <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-4/6"></div>
+                    </div>
+                  ) : summaryStatus === 'ready' && callSummary?.summary ? (
+                    <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                      {callSummary.summary}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-slate-400 italic">
+                      לא נוצר סיכום לשיחה זו
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Outcome Selection */}
+              <div>
+                <label className="text-sm font-bold text-slate-900 dark:text-white mb-3 block">מה הסטטוס?</label>
+                <div className="grid grid-cols-3 gap-3">
+                  {outcomes.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => handleOutcomeClick(item.id)}
+                      className={`flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all ${outcome === item.id
+                        ? `${item.color} ring-2 ring-offset-2 ring-offset-white dark:ring-offset-slate-950 ring-brand-500`
+                        : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300'
+                        }`}
+                    >
+                      <item.icon className="w-6 h-6" />
+                      <span className="font-bold text-sm text-center">{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Follow Up Form - Premium Design */}
+              {showFollowUpForm && (
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-5 border border-blue-200 dark:border-blue-800 space-y-4 animate-in slide-in-from-top-2 pb-64">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+                      <Clock className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="text-sm font-bold text-blue-700 dark:text-blue-300">תזמן המשך טיפול</span>
+                  </div>
+
+                  {/* Date Time Picker */}
+                  <DateTimePicker
+                    value={followUpDate}
+                    onChange={setFollowUpDate}
+                    minDate={new Date()}
+                    label="תאריך ושעה"
+                    showTime={true}
+                  />
+
+                  {/* Notes */}
+                  <div>
+                    <label className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-2 block flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5" />
+                      הערות לשיחה הבאה
+                    </label>
+                    <textarea
+                      value={followUpNotes}
+                      onChange={(e) => setFollowUpNotes(e.target.value)}
+                      placeholder="מה סוכם? על מה לדבר בפעם הבאה? פרטים חשובים..."
+                      rows={3}
+                      className="w-full rounded-xl border-2 border-slate-200 dark:border-slate-700 p-3 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-right placeholder:text-slate-400 resize-none text-sm"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Not Relevant Form */}
+              {showNotRelevantForm && (
+                <div className="bg-rose-50 dark:bg-rose-900/20 rounded-xl p-4 border border-rose-200 dark:border-rose-800 space-y-3 animate-in slide-in-from-top-2">
+                  <label className="text-xs font-bold text-rose-600 dark:text-rose-400 mb-1.5 block">למה לא רלוונטי?</label>
+                  <div className="flex items-start gap-2 bg-white dark:bg-slate-800 border border-rose-200 dark:border-rose-700 rounded-lg px-3 py-2">
+                    <ThumbsDown className="w-4 h-4 text-rose-400 mt-0.5" />
+                    <textarea
+                      value={notRelevantReason}
+                      onChange={(e) => setNotRelevantReason(e.target.value)}
+                      placeholder="לדוגמה: תקציב לא מתאים, לא מעוניין כרגע, עבר למתחרה..."
+                      rows={2}
+                      className="bg-transparent border-none text-sm w-full outline-none text-slate-900 dark:text-white resize-none"
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {activeTab === 'transcript' && (
+            <div className="space-y-3 max-h-[400px] overflow-y-auto">
+              {transcripts.length === 0 ? (
+                <p className="text-sm text-slate-400 text-center py-8">אין תמלול זמין</p>
+              ) : (
+                transcripts.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex flex-col ${msg.speaker === 'agent' ? 'items-end' : 'items-start'}`}
+                  >
+                    <span className={`text-xs font-bold uppercase tracking-wider mb-1 ${msg.speaker === 'agent' ? 'text-brand-600' : 'text-slate-500'
+                      }`}>
+                      {msg.speaker === 'agent' ? 'נציג' : 'לקוח'}
+                    </span>
+                    <div className={`max-w-[85%] px-4 py-2 rounded-xl text-sm ${msg.speaker === 'agent'
+                      ? 'bg-brand-50 dark:bg-brand-900/20 text-slate-800 dark:text-slate-200'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
+                      }`}>
+                      {msg.text}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex justify-between items-center">
+          <button
+            onClick={dismissSummaryModal}
+            className="text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 font-medium px-4"
+          >
+            דלג וסגור
+          </button>
+          <Button
+            onClick={handleSave}
+            disabled={!outcome || isSaving}
+            className="px-6 shadow-lg shadow-brand-500/20"
+          >
+            {isSaving ? (
+              <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+            ) : (
+              <Save className="w-4 h-4 ml-2" />
+            )}
+            שמור וסיים
+          </Button>
+        </div>
+
+      </div>
+    </div>
+  );
+};
