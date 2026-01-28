@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Key, Plus, Copy, Trash2, Check, AlertTriangle, Loader2, Globe, Zap, Repeat2, Webhook, FileText, Facebook, Instagram, Search, ExternalLink, RefreshCw, Smartphone, ShieldCheck } from 'lucide-react';
+import { Key, Plus, Copy, Trash2, Check, AlertTriangle, Loader2, Globe, Zap, Repeat2, Webhook, FileText, Facebook, Instagram, Search, ExternalLink, RefreshCw, Smartphone, ShieldCheck, Book } from 'lucide-react';
 import { supabase } from '../../src/lib/supabaseClient';
+import { WebhookDocs } from './WebhookDocs';
 
 interface ApiKey {
     id: string;
@@ -288,6 +289,14 @@ export const WebhookSettings: React.FC = () => {
                         </div>
                     </div>
                 ))}
+            </div>
+
+            {/* Documentation Section */}
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+                <WebhookDocs
+                    webhookUrl={magicLinkBase}
+                    apiKey={newlyCreatedKey || 'YOUR_API_KEY'}
+                />
             </div>
 
             {/* 3. Advanced Settings Checkbox */}
