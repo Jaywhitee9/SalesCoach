@@ -5,6 +5,10 @@ const path = require('path');
 // Plugins
 fastify.register(require('@fastify/formbody'));
 fastify.register(require('@fastify/websocket'));
+fastify.register(require('@fastify/cors'), {
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+});
 
 // Static Files (Serve Client)
 fastify.register(require('@fastify/static'), {

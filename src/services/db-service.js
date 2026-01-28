@@ -241,28 +241,31 @@ class DBService {
     }
 
     // Create a new lead (used by webhook for external sources)
+    // Using RPC function to bypass PostgREST schema cache issues
     async createLead(leadData) {
         try {
-            const { data, error } = await supabase
-                .from('leads')
-                .insert({
-                    organization_id: leadData.organization_id,
-                    name: leadData.name,
-                    phone: leadData.phone,
-                    email: leadData.email,
-                    company: leadData.company,
-                    source: leadData.source,
-                    status: leadData.status || 'New',
-                    priority: leadData.priority || 'Hot',
-                    value: leadData.value ? parseInt(String(leadData.value).replace(/[^0-9]/g, '')) : 0,
-                    notes: leadData.notes
-                })
-                .select()
-                .single();
+            // Call the RPC function
+            const { data, error } = await supabase.rpc('create_webhook_lead', {
+                p_org_id: leadData.organization_id,
+                p_name: leadData.name || 'Unknown',
+                p_phone: leadData.phone || '',
+                p_email: leadData.email || '',
+                p_company: leadData.company || '',
+                p_source: leadData.source || 'Webhook',
+                p_status: leadData.status || 'New',
+                p_priority: leadData.priority || 'Hot',
+                p_value: leadData.value ? parseInt(String(leadData.value).replace(/[^0-9]/g, '')) : 0,
+                p_tags: leadData.tags || []
+            });
 
-            if (error) throw error;
-            console.log(`[DB] Lead created: ${data.id} - ${data.name} (${data.source})`);
-            return data;
+            if (error) {
+                console.error('[DB] createLead RPC Error:', JSON.stringify(error));
+                throw error;
+            }
+
+            const lead = data?.[0] || data;
+            console.log(`[DB] Lead created via RPC: ${lead?.id} - ${lead?.name} (${lead?.source})`);
+            return lead;
         } catch (err) {
             console.error('[Supabase] Create Lead Error:', err);
             throw err;
@@ -1226,8 +1229,10 @@ class DBService {
                     organization_id: organizationId,
                     key_hash: keyHash,
                     key_prefix: keyPrefix,
+                    key_prefix: keyPrefix,
                     name: name || 'Default Key',
-                    created_by: createdBy
+                    created_by: createdBy,
+                    is_active: true
                 })
                 .select('id, key_prefix, name, is_active, created_at')
                 .single();
@@ -1251,36 +1256,42 @@ class DBService {
     async verifyApiKey(apiKey) {
         const crypto = require('crypto');
 
-        if (!apiKey || !apiKey.startsWith('org_sk_')) {
+        if (!apiKey || !apiKey.trim().startsWith('org_sk_')) {
             return null;
         }
 
+        const cleanKey = apiKey.trim();
+
         // Hash the provided key
-        const keyHash = crypto.createHash('sha256').update(apiKey).digest('hex');
+        const keyHash = crypto.createHash('sha256').update(cleanKey).digest('hex');
 
         try {
             const { data, error } = await supabase
                 .from('api_keys')
-                .select('id, organization_id, name, is_active')
+                .select('id, organization_id, name, is_active, usage_count')
                 .eq('key_hash', keyHash)
                 .eq('is_active', true)
                 .single();
 
             if (error || !data) {
-                console.log('[DB] API Key not found or inactive');
+                console.log(`[DB] WARN: Verify failed for key prefix ${cleanKey.substring(0, 10)}...`);
+                if (error) console.error('[DB] Error:', error);
                 return null;
             }
 
-            // Update last used timestamp
+            // Update last used timestamp (Safe update)
+            // Note: Atomic increment in Supabase JS requires RPC or ignore race condition for now
+            const newCount = (data.usage_count || 0) + 1;
+
             await supabase
                 .from('api_keys')
                 .update({
                     last_used_at: new Date().toISOString(),
-                    usage_count: supabase.sql`usage_count + 1`
+                    usage_count: newCount
                 })
                 .eq('id', data.id);
 
-            console.log(`[DB] API Key verified: ${apiKey.substring(0, 12)}... -> org ${data.organization_id}`);
+            console.log(`[DB] API Key verified: ${cleanKey.substring(0, 12)}... -> org ${data.organization_id}`);
             return data.organization_id;
         } catch (err) {
             console.error('[DB] Verify API Key Error:', err);

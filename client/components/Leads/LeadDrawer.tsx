@@ -377,7 +377,7 @@ export const LeadDrawer: React.FC<LeadDrawerProps> = ({ lead, onClose, updateLea
                   </button>
                </div>
 
-               <div className="grid grid-cols-2 gap-y-6 gap-x-8">
+               <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-8">
                   <div>
                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">סטטוס</span>
                      <Badge variant={getStatusColor(lead.status) as any} className="text-xs px-3 py-1">{getStatusLabel(lead.status)}</Badge>
@@ -483,7 +483,7 @@ export const LeadDrawer: React.FC<LeadDrawerProps> = ({ lead, onClose, updateLea
                <Building2 className="w-4 h-4 text-brand-500" />
                פרטי עסק
             </h3>
-            <div className="grid grid-cols-2 gap-6 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-4">
                <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-100 dark:border-slate-800">
                   <p className="text-xs text-slate-500 mb-1">שם החברה</p>
                   <p className="text-sm font-bold text-slate-900 dark:text-white">{lead.company}</p>
@@ -952,7 +952,7 @@ export const LeadDrawer: React.FC<LeadDrawerProps> = ({ lead, onClose, updateLea
                      </div>
 
                      {/* Score Breakdown */}
-                     <div className="grid grid-cols-3 gap-4 mb-4">
+                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-4">
                         {[
                            { label: 'התאמה', value: lead.scoreDetails?.fit, icon: User },
                            { label: 'מעורבות', value: lead.scoreDetails?.activity, icon: Clock },
@@ -1155,7 +1155,7 @@ export const LeadDrawer: React.FC<LeadDrawerProps> = ({ lead, onClose, updateLea
                               />
                            </div>
 
-                           <div className="grid grid-cols-2 gap-3">
+                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                               <div>
                                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">סטטוס</label>
                                  <div className="relative">

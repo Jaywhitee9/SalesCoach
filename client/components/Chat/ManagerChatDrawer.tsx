@@ -84,12 +84,12 @@ export const ManagerChatDrawer: React.FC<ManagerChatDrawerProps> = ({
             .limit(1);
         }
 
-        const { data, error } = await query.single();
+        const { data, error } = await query;
 
         console.log('[Chat] Found chat partner:', data, 'error:', error);
 
-        if (data && !error) {
-          setManager(data);
+        if (data && data.length > 0 && !error) {
+          setManager(data[0]);
         } else {
           // Fallback: just find anyone else in the org
           const { data: fallback } = await supabase
@@ -97,12 +97,11 @@ export const ManagerChatDrawer: React.FC<ManagerChatDrawerProps> = ({
             .select('id, full_name, avatar_url, role')
             .eq('organization_id', orgId)
             .neq('id', currentUser.id)
-            .limit(1)
-            .single();
+            .limit(1);
 
           console.log('[Chat] Fallback partner:', fallback);
-          if (fallback) {
-            setManager(fallback);
+          if (fallback && fallback.length > 0) {
+            setManager(fallback[0]);
           } else {
             setNoPartnerFound(true);
           }

@@ -112,7 +112,8 @@ async function registerApiRoutes(fastify) {
                 status: leadData.status || 'New',
                 priority: leadData.priority || 'Hot',
                 value: leadData.value || null,
-                notes: leadData.notes || null
+                notes: leadData.notes || null,
+                tags: leadData.tags || []
             });
 
             console.log('[Webhook] Lead created:', lead?.id, 'Source:', leadData.source, 'Org:', organizationId);
@@ -121,6 +122,85 @@ async function registerApiRoutes(fastify) {
             console.error('[Webhook] Lead creation error:', err.message);
             return reply.code(500).send({ success: false, error: 'Failed to create lead: ' + err.message });
         }
+    });
+
+    // --- DEBUG ENDPOINT (Temporary) ---
+    fastify.get('/api/debug/check-key', async (request, reply) => {
+        const apiKey = request.query.apiKey;
+        if (!apiKey) return { error: 'Missing apiKey param' };
+
+        const crypto = require('crypto');
+        const keyHash = crypto.createHash('sha256').update(apiKey.trim()).digest('hex');
+
+        // Manual lookup to debug
+        const { createClient } = require('@supabase/supabase-js');
+        const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+        const { data, error } = await supabase
+            .from('api_keys')
+            .select('*')
+            .eq('key_hash', keyHash);
+
+        // Check leads table structure
+        const { data: leadSample, error: leadError } = await supabase
+            .from('leads')
+            .select('*')
+            .limit(1);
+
+        // Try to Insert a Dummy Lead to check for Constraint/Column errors
+        let insertTest = { success: false, error: null };
+        try {
+            // Use random phone to avoid unique constraints
+            const randomPhone = '050' + Math.floor(Math.random() * 10000000);
+
+            const { data: insertedLead, error: insertError } = await supabase
+                .from('leads')
+                .insert({
+                    organization_id: data[0].organization_id,
+                    org_id: data[0].organization_id, // MATCHING THE FIX: Sending org_id
+                    name: 'Debug Probe',
+                    phone: randomPhone,
+                    email: 'debug@probe.com',
+                    source: 'Debug Explorer',
+                    tags: ['Debug'],
+                    status: 'New'
+                })
+                .select()
+                .single();
+
+            if (insertError) {
+                insertTest.error = insertError;
+            } else {
+                insertTest.success = true;
+                insertTest.leadId = insertedLead.id;
+                // Cleanup
+                await supabase.from('leads').delete().eq('id', insertedLead.id);
+            }
+        } catch (err) {
+            insertTest.error = err.message;
+        }
+
+        // Get schema of leads table
+        const { data: schemaData, error: schemaError } = await supabase
+            .rpc('get_leads_columns');
+
+        return {
+            providedKey: apiKey,
+            computedHash: keyHash,
+            dbResult: data,
+            insertTestResult: insertTest,
+            leadsTableCheck: {
+                sample: leadSample ? leadSample[0] : null,
+                error: leadError
+            },
+            schemaInfo: schemaData || schemaError,
+            envCheck: {
+                hasServiceKey: !!supabaseServiceKey,
+                url: supabaseUrl
+            }
+        };
     });
 
     // --- CALLS (Existing functionality via API) ---
