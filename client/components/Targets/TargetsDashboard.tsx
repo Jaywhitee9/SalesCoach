@@ -45,13 +45,20 @@ export const TargetsDashboard: React.FC<TargetsDashboardProps> = ({ isDarkMode, 
          setLoading(true);
 
          // 1. Fetch Team Members
+         // 1. Fetch Team Members
          const { data: usersData, error: usersError } = await supabase
-            .from('users')
-            .select('id, name, avatar, role, organization_id')
+            .from('profiles')
+            .select('id, full_name, avatar_url, role, organization_id')
             .eq('organization_id', orgId);
 
          if (usersData) {
-            setTeamMembers(usersData);
+            setTeamMembers(usersData.map((u: any) => ({
+               id: u.id,
+               name: u.full_name,
+               avatar: u.avatar_url,
+               role: u.role,
+               organization_id: u.organization_id
+            })));
          }
 
          // 2. Fetch Targets
@@ -263,7 +270,11 @@ export const TargetsDashboard: React.FC<TargetsDashboardProps> = ({ isDarkMode, 
                            <tr key={user.id} className="group hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors" onClick={() => setSelectedRepId(user.id)}>
                               <td className="px-6 py-4">
                                  <div className="flex items-center gap-3">
-                                    <img src={user.avatar} className="w-9 h-9 rounded-full border border-slate-200 dark:border-slate-700 object-cover" alt="" />
+                                    <img
+                                       src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=random`}
+                                       className="w-9 h-9 rounded-full border border-slate-200 dark:border-slate-700 object-cover"
+                                       alt=""
+                                    />
                                     <div>
                                        <p className="font-bold text-slate-900 dark:text-white text-sm">{user.name}</p>
                                        <p className="text-xs text-slate-500">{user.role}</p>

@@ -7,6 +7,7 @@ export interface User {
   type: 'rep' | 'manager' | 'super_admin';
   email?: string;
   organization_id?: string;
+  center_type?: 'sales' | 'support';
 }
 
 export type UserRole = 'rep' | 'manager' | 'super_admin';
@@ -239,6 +240,7 @@ export interface Organization {
   id: string;
   name: string;
   plan: 'Free' | 'Pro' | 'Enterprise';
+  center_type?: 'sales' | 'support';
   status: 'Active' | 'Suspended' | 'Trial';
   logo: string;
   usersCount: number;

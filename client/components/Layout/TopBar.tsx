@@ -1,8 +1,6 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Search,
-  Bell,
   Sun,
   Moon,
   MessageCircle,
@@ -14,7 +12,7 @@ import {
   BookOpen,
   Lightbulb,
   Target,
-  Menu, // Hamburger Icon
+  Menu,
   User as UserIcon,
   Settings as SettingsIcon,
   LogOut as LogOutIcon
@@ -22,15 +20,20 @@ import {
 import { User } from '../../types';
 import { Button } from '../Common/Button';
 import { Badge } from '../Common/Badge';
+import { NotificationsDropdown } from '../Notifications/NotificationsDropdown';
 
 interface TopBarProps {
   user: User;
+  userId?: string;
+  orgId?: string;
   isDarkMode: boolean;
   toggleTheme: () => void;
   onNavigate: (page: string) => void;
   onOpenChat?: () => void;
+  onOpenReminders?: () => void;
   onToggleMobileMenu: () => void;
   onLogout: () => void;
+  onNavigateToLead?: (leadId: string) => void;
 }
 
 // --- MOCK DATA ---
@@ -90,13 +93,11 @@ const HELP_ACTIONS = [
   { id: 'a3', label: 'איך לעבוד עם תובנות ה-AI' },
 ];
 
-export const TopBar: React.FC<TopBarProps> = ({ user, isDarkMode, toggleTheme, onNavigate, onOpenChat, onToggleMobileMenu, onLogout }) => {
+export const TopBar: React.FC<TopBarProps> = ({ user, userId, orgId, isDarkMode, toggleTheme, onNavigate, onOpenChat, onOpenReminders, onToggleMobileMenu, onLogout, onNavigateToLead }) => {
   const isRep = user.type === 'rep';
 
   // State
-  const [activePanel, setActivePanel] = useState<'notifications' | 'help' | 'userMenu' | null>(null);
-  const [hasUnread, setHasUnread] = useState(true);
-  const [reminderFilter, setReminderFilter] = useState<'today' | 'week' | 'all'>('today');
+  const [activePanel, setActivePanel] = useState<'help' | 'userMenu' | null>(null);
 
   // Refs for click outside
   const containerRef = useRef<HTMLDivElement>(null);
@@ -114,24 +115,13 @@ export const TopBar: React.FC<TopBarProps> = ({ user, isDarkMode, toggleTheme, o
     };
   }, []);
 
-  const togglePanel = (panel: 'notifications' | 'help') => {
+  const togglePanel = (panel: 'help') => {
     if (activePanel === panel) {
       setActivePanel(null);
     } else {
       setActivePanel(panel);
-      if (panel === 'notifications') {
-        setHasUnread(false);
-      }
     }
   };
-
-  // Filter Logic
-  const filteredNotifications = MOCK_NOTIFICATIONS.filter(n => {
-    if (reminderFilter === 'all') return true;
-    if (reminderFilter === 'today') return n.category === 'today';
-    if (reminderFilter === 'week') return n.category === 'today' || n.category === 'week';
-    return true;
-  });
 
   return (
     <header className="h-16 px-4 md:px-6 flex items-center justify-between flex-shrink-0 z-40 sticky top-0
@@ -263,85 +253,13 @@ export const TopBar: React.FC<TopBarProps> = ({ user, isDarkMode, toggleTheme, o
             {isDarkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
           </button>
 
-          {/* Notification Bell */}
-          <div className="relative">
-            <button
-              onClick={() => togglePanel('notifications')}
-              className={`relative p-2 rounded-full transition-colors ${activePanel === 'notifications' ? 'bg-brand-50 text-brand-600 dark:bg-brand-900/20 dark:text-brand-400' : 'text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
-            >
-              <Bell className="w-5 h-5" />
-              {hasUnread && (
-                <span className="absolute top-2.5 left-2.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white dark:border-slate-900"></span>
-              )}
-            </button>
-
-            {/* Notifications Panel - Fixed Position: Aligned to Left (visual Left in RTL) to expand Right */}
-            {activePanel === 'notifications' && (
-              <div className="absolute top-full left-0 mt-3 w-72 sm:w-80 sm:w-96 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200 origin-top-left flex flex-col max-h-[500px]">
-
-                {/* Header */}
-                <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col gap-3 sticky top-0 bg-white dark:bg-slate-900 z-10">
-                  <div className="flex justify-between items-center">
-                    <h3 className="font-bold text-slate-900 dark:text-white">התזכורות שלי</h3>
-                    <span className="text-[10px] bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-slate-500">
-                      {filteredNotifications.length} פעילים
-                    </span>
-                  </div>
-                  {/* Filter Chips */}
-                  <div className="flex gap-2">
-                    {[
-                      { id: 'today', label: 'היום' },
-                      { id: 'week', label: 'השבוע' },
-                      { id: 'all', label: 'הכול' }
-                    ].map(f => (
-                      <button
-                        key={f.id}
-                        onClick={() => setReminderFilter(f.id as any)}
-                        className={`text-xs px-2.5 py-1 rounded-md font-medium transition-colors ${reminderFilter === f.id ? 'bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300' : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'}`}
-                      >
-                        {f.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* List */}
-                <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                  {filteredNotifications.length > 0 ? (
-                    filteredNotifications.map(item => (
-                      <div key={item.id} className="group p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer border border-transparent hover:border-slate-100 dark:hover:border-slate-800">
-                        <div className="flex justify-between items-start mb-1">
-                          <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200 leading-tight group-hover:text-brand-600 transition-colors">
-                            {item.title}
-                          </h4>
-                          <Badge variant={item.status === 'completed' ? 'success' : item.status === 'active' ? 'warning' : 'neutral'} className="text-[10px] px-1.5 py-0">
-                            {item.status === 'active' ? 'פעיל' : item.status === 'future' ? 'עתידי' : 'הושלם'}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-2 line-clamp-1">{item.desc}</p>
-                        <div className="flex items-center gap-2 text-[10px] font-medium text-slate-400">
-                          <Clock className="w-3 h-3" />
-                          {item.time}
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8">
-                      <CheckCircle2 className="w-8 h-8 text-slate-200 mx-auto mb-2" />
-                      <p className="text-xs text-slate-400">אין תזכורות לטווח זה</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Footer */}
-                <div className="p-3 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-center sticky bottom-0">
-                  <button className="text-xs font-bold text-brand-600 dark:text-brand-400 hover:text-brand-700 transition-colors">
-                    נהל תזכורות
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Notification Bell - Using New Component */}
+          <NotificationsDropdown
+            userId={userId || user.id}
+            orgId={orgId || user.organization_id}
+            onNavigateToLead={onNavigateToLead}
+            onOpenReminders={onOpenReminders}
+          />
         </div>
 
         <div className="h-8 w-px bg-slate-200 dark:bg-slate-700 mx-2 hidden md:block"></div>
@@ -352,7 +270,7 @@ export const TopBar: React.FC<TopBarProps> = ({ user, isDarkMode, toggleTheme, o
             className="flex items-center gap-3 pl-1 pr-2 py-1 rounded-xl hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors group"
           >
             <div className="relative">
-              <img src={user.avatar} alt={user.name} className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-600 shadow-sm group-hover:border-brand-300 transition-colors" />
+              <img src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=random`} alt={user.name} className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-600 shadow-sm group-hover:border-brand-300 transition-colors" />
               <div className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-white dark:border-slate-900 rounded-full"></div>
             </div>
             <div className="text-right hidden md:block">

@@ -651,7 +651,7 @@ class DBService {
                 }
             }
 
-            // 2. Get calls made by user in period
+            // Build queries (but don't await yet)
             let callsQuery = supabase
                 .from('calls')
                 .select('id, status, lead_id')
@@ -660,9 +660,6 @@ class DBService {
             if (userId) callsQuery = callsQuery.eq('agent_id', userId);
             else if (organizationId) callsQuery = callsQuery.eq('organization_id', organizationId);
 
-            const { data: calls } = await callsQuery;
-
-            // 3. Get new leads assigned to user created in period
             let leadsQuery = supabase
                 .from('leads')
                 .select('id')
@@ -671,31 +668,36 @@ class DBService {
             if (userId) leadsQuery = leadsQuery.eq('owner_id', userId);
             else if (organizationId) leadsQuery = leadsQuery.eq('organization_id', organizationId);
 
-            const { data: newLeads } = await leadsQuery;
-
-            // 4. Get appointments (leads modified in period with status appointment)
             let apptQuery = supabase
                 .from('leads')
                 .select('id')
                 .or('status.ilike.%appointment%,status.ilike.%meeting%,status.eq.Discovery')
-                .gte('updated_at', startISO);
+                .gte('created_at', startISO);
 
             if (userId) apptQuery = apptQuery.eq('owner_id', userId);
             else if (organizationId) apptQuery = apptQuery.eq('organization_id', organizationId);
 
-            const { data: appointments } = await apptQuery;
-
-            // 5. Get closed deals
             let dealsQuery = supabase
                 .from('leads')
                 .select('id')
                 .eq('status', 'Closed')
-                .gte('updated_at', startISO);
+                .gte('created_at', startISO);
 
             if (userId) dealsQuery = dealsQuery.eq('owner_id', userId);
             else if (organizationId) dealsQuery = dealsQuery.eq('organization_id', organizationId);
 
-            const { data: closedDeals } = await dealsQuery;
+            // PARALLEL EXECUTION - All queries at once
+            const [callsResult, leadsResult, apptResult, dealsResult] = await Promise.all([
+                callsQuery,
+                leadsQuery,
+                apptQuery,
+                dealsQuery
+            ]);
+
+            const calls = callsResult.data;
+            const newLeads = leadsResult.data;
+            const appointments = apptResult.data;
+            const closedDeals = dealsResult.data;
 
             const leadsContacted = calls?.length || 0;
             const newLeadsCount = newLeads?.length || 0;
@@ -1320,6 +1322,165 @@ class DBService {
     }
 
 
+    // --- ORGANIZATION SETTINGS ---
+
+    async getOrganizationSettings(organizationId) {
+        try {
+            const { data, error } = await supabase
+                .from('organization_settings')
+                .select('*')
+                .eq('organization_id', organizationId)
+                .single();
+
+            if (error && error.code !== 'PGRST116') throw error; // Ignore not found error
+
+            // Return defaults if not found
+            if (!data) {
+                return {
+                    calls_config: {
+                        transcription: true,
+                        aiInsights: true,
+                        language: 'auto',
+                        aiModel: 'standard',
+                        shortTips: false,
+                        coachingWeights: { discovery: 70, objections: 50, closing: 85 }
+                    },
+                    stages_config: ["פתיחה והיכרות", "גילוי צרכים והבנת כאב", "הצגת חזון ופתרון", "טיפול בהתנגדויות", "הצעת מחיר וסגירה"]
+                };
+            }
+
+            return data;
+        } catch (err) {
+            console.error('[DB] Get Org Settings Error:', err.message);
+            throw err;
+        }
+    }
+
+    async updateOrganizationSettings(organizationId, settings) {
+        try {
+            // Check if exists
+            const { data: existing } = await supabase
+                .from('organization_settings')
+                .select('id')
+                .eq('organization_id', organizationId)
+                .single();
+
+            let result;
+            if (existing) {
+                const { data, error } = await supabase
+                    .from('organization_settings')
+                    .update({
+                        calls_config: settings.calls_config,
+                        stages_config: settings.stages_config,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('organization_id', organizationId)
+                    .select()
+                    .single();
+                if (error) throw error;
+                result = data;
+            } else {
+                const { data, error } = await supabase
+                    .from('organization_settings')
+                    .insert({
+                        organization_id: organizationId,
+                        calls_config: settings.calls_config,
+                        stages_config: settings.stages_config
+                    })
+                    .select()
+                    .single();
+                if (error) throw error;
+                result = data;
+            }
+            return result;
+        } catch (err) {
+            console.error('[DB] Update Org Settings Error:', err.message);
+            throw err;
+        }
+    }
+
+    // --- KNOWLEDGE BASE ---
+
+    async getKnowledge(organizationId, domain = null) {
+        try {
+            let query = supabase
+                .from('organization_knowledge')
+                .select('*')
+                .eq('organization_id', organizationId)
+                .eq('is_active', true)
+                .order('priority', { ascending: false });
+
+            if (domain) {
+                query = query.eq('domain', domain);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+            return data || [];
+        } catch (err) {
+            console.error('[DB] Get Knowledge Error:', err.message);
+            return [];
+        }
+    }
+
+    async upsertKnowledge(item) {
+        try {
+            const { id, organizationId, domain, knowledge_type, title, content } = item;
+
+            if (id) {
+                // Update
+                const { data, error } = await supabase
+                    .from('organization_knowledge')
+                    .update({
+                        content,
+                        title,
+                        updated_at: new Date().toISOString()
+                    })
+                    .eq('id', id)
+                    .eq('organization_id', organizationId)
+                    .select()
+                    .single();
+
+                if (error) throw error;
+                return data;
+            } else {
+                // Insert
+                const { data, error } = await supabase
+                    .from('organization_knowledge')
+                    .insert({
+                        organization_id: organizationId,
+                        domain,
+                        knowledge_type,
+                        title,
+                        content
+                    })
+                    .select()
+                    .single();
+
+                if (error) throw error;
+                return data;
+            }
+        } catch (err) {
+            console.error('[DB] Upsert Knowledge Error:', err.message);
+            throw err;
+        }
+    }
+
+    async deleteKnowledge(id, organizationId) {
+        try {
+            const { error } = await supabase
+                .from('organization_knowledge')
+                .delete()
+                .eq('id', id)
+                .eq('organization_id', organizationId);
+
+            if (error) throw error;
+            return true;
+        } catch (err) {
+            console.error('[DB] Delete Knowledge Error:', err.message);
+            return false;
+        }
+    }
 }
 
 module.exports = new DBService();

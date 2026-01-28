@@ -322,6 +322,43 @@ async function registerTwilioRoutes(fastify) {
                 console.log(`[Coaching-Trigger] Valid Customer Final: "${text.substring(0, 20)}..."`);
 
                 const account = TenantStore.getAccount(call.accountId);
+
+                // === LOAD REAL SETTINGS FROM DB ===
+                let organizationId = call.context?.agent?.organizationId;
+                if (organizationId) {
+                    const orgSettings = await TenantStore.loadOrganizationSettings(organizationId);
+                    // Merge settings into account config
+                    account.config = {
+                        ...account.config,
+                        ...orgSettings
+                    };
+                    console.log(`[Coaching] Loaded settings for org ${organizationId}:`, {
+                        model: orgSettings.calls_config?.aiModel,
+                        stages: orgSettings.stages_config?.length
+                    });
+                }
+
+                // === LOAD LEAD PROFILE FOR CONTEXT ===
+                const leadId = call.context?.customLeadId;
+                if (leadId) {
+                    try {
+                        const supabase = require('../lib/supabase');
+                        const { data: lead } = await supabase
+                            .from('leads')
+                            .select('name, company, phone, email, status, priority, value, tags, source, notes')
+                            .eq('id', leadId)
+                            .single();
+
+                        if (lead) {
+                            // Inject lead profile into account config for coaching engine
+                            account.config.leadProfile = lead;
+                            console.log(`[Coaching] Loaded lead profile: ${lead.name} from ${lead.company || 'Unknown'}`);
+                        }
+                    } catch (err) {
+                        console.error(`[Coaching] Failed to load lead profile:`, err.message);
+                    }
+                }
+
                 const history = call.transcripts;
                 const mixedHistory = [
                     ...history.customer.map(t => ({ role: 'customer', text: t.text, timestamp: t.timestamp })),

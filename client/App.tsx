@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Sidebar } from './components/Layout/Sidebar';
 import { TopBar } from './components/Layout/TopBar';
 import { EmptyCallState } from './components/Call/EmptyCallState';
@@ -14,6 +14,8 @@ import { TargetsDashboard } from './components/Targets/TargetsDashboard';
 import { PanelDashboard } from './components/Panel/PanelDashboard';
 import { TeamChatDashboard } from './components/Chat/TeamChatDashboard';
 import { ManagerChatDrawer } from './components/Chat/ManagerChatDrawer';
+import { GamificationDashboard } from './components/Gamification/GamificationDashboard';
+import { RemindersModal } from './components/Notifications/RemindersModal';
 import { SuperAdminDashboard } from './components/SuperAdmin/SuperAdminDashboard';
 import { Login } from './components/Auth/Login';
 import { Button } from './components/Common/Button';
@@ -28,7 +30,7 @@ import { CallProvider, useCall } from './src/context/CallContext';
 import { supabase } from './src/lib/supabaseClient';
 
 
-type Page = 'dashboard' | 'calls' | 'leads' | 'settings' | 'pipeline' | 'tasks' | 'targets' | 'chat';
+type Page = 'dashboard' | 'calls' | 'leads' | 'settings' | 'pipeline' | 'tasks' | 'targets' | 'chat' | 'gamification';
 
 // Inner App Component (Inside Provider)
 function SalesFlowApp() {
@@ -36,12 +38,12 @@ function SalesFlowApp() {
   const [isDarkMode, setIsDarkMode] = useState(() => {
     // Check localStorage or system preference on init
     if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('isDarkMode');
-      if (saved !== null) {
-        return JSON.parse(saved);
-      }
-      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+      // FORCE WHITE MODE DEFAULT
+      // Ignore localStorage for now to guarantee white mode
+      document.documentElement.classList.remove('dark');
+      return false;
     }
+    document.documentElement.classList.remove('dark');
     return false;
   });
 
@@ -49,12 +51,28 @@ function SalesFlowApp() {
     setIsDarkMode((prev: boolean) => {
       const newValue = !prev;
       localStorage.setItem('isDarkMode', JSON.stringify(newValue));
+      if (newValue) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
       return newValue;
     });
   };
+
+  // Sync on mount and change
+  useEffect(() => {
+    console.log('[Theme] isDarkMode changed to:', isDarkMode);
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [activePage, setActivePage] = useState<Page>('dashboard');
   const [isChatDrawerOpen, setIsChatDrawerOpen] = useState(false);
+  const [isRemindersModalOpen, setIsRemindersModalOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   // Auth State
@@ -63,7 +81,20 @@ function SalesFlowApp() {
   const [authError, setAuthError] = useState<string | null>(null);
 
   // Admin V4 State (Impersonation)
-  const [impersonatedOrg, setImpersonatedOrg] = useState<{ id: string, name: string } | null>(null);
+  const [impersonatedOrg, setImpersonatedOrg] = useState<{ id: string, name: string, center_type?: 'sales' | 'support' } | null>(null);
+
+  // Compute effective org ID for Shadow Mode - use impersonated org if in shadow mode
+  const effectiveOrgId = impersonatedOrg?.id || currentUser?.organization_id;
+
+  // Create an effective user object that has the correct org ID and Center Type for Shadow Mode
+  // MEMOIZED to prevent unnecessary re-renders
+  const effectiveUser = useMemo(() => currentUser ? {
+    ...currentUser,
+    organization_id: effectiveOrgId || currentUser.organization_id,
+    center_type: impersonatedOrg?.center_type || currentUser.center_type || 'sales'
+  } : null, [currentUser, effectiveOrgId, impersonatedOrg?.center_type]);
+
+  // Removed noisy useEffect that logged on every render
 
   // Logic Hooks
   const { callStatus, startCall, hangup, callSummary, clearSummary, initDevice, isReady, activeLeadId, callDuration, transcripts } = useCall();
@@ -79,22 +110,37 @@ function SalesFlowApp() {
         setAuthLoading(true);
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
-          const { data: profile } = await supabase
+          // Fetch profile with organization center_type
+          const { data: profile, error } = await supabase
             .from('profiles')
-            .select('*, organizations(name, status)')
+            .select(`
+              *,
+              organization:organizations!organization_id(center_type)
+            `)
             .eq('id', session.user.id)
             .single();
 
+          if (error) {
+            console.error("Error fetching profile:", error);
+            setAuthError(error.message);
+            await supabase.auth.signOut();
+            return;
+          }
+
           if (profile) {
-            setCurrentUser({
+            // Flatten center_type into the user object
+            const userWithCenterType: User = {
               id: profile.id,
               name: profile.full_name || 'User',
               email: profile.email,
               avatar: profile.avatar_url,
               role: profile.role, // Important for Admin check
               type: profile.role === 'platform_admin' ? 'super_admin' : profile.role, // Map to new design types
-              organization_id: profile.organization_id
-            } as User);
+              organization_id: profile.organization_id,
+              center_type: (Array.isArray(profile.organization) ? profile.organization[0]?.center_type : profile.organization?.center_type) || 'sales'
+            } as User;
+
+            setCurrentUser(userWithCenterType);
             setIsAuthenticated(true);
           }
         }
@@ -177,7 +223,7 @@ function SalesFlowApp() {
   if (currentUser.type === 'super_admin' && !impersonatedOrg) {
     return <SuperAdminDashboard
       onLogout={handleLogout}
-      onImpersonate={(orgId, orgName) => setImpersonatedOrg({ id: orgId, name: orgName })}
+      onImpersonate={(orgId, orgName, centerType) => setImpersonatedOrg({ id: orgId, name: orgName, center_type: centerType })}
     />;
   }
 
@@ -189,6 +235,7 @@ function SalesFlowApp() {
           activePage={activePage}
           onNavigate={handleNavigate}
           userRole={currentUser.type}
+          centerType={effectiveUser?.center_type}
           isOpen={isMobileMenuOpen}
           onClose={() => setIsMobileMenuOpen(false)}
         />
@@ -201,6 +248,7 @@ function SalesFlowApp() {
             toggleTheme={toggleTheme}
             onNavigate={handleNavigate}
             onOpenChat={() => setIsChatDrawerOpen(true)}
+            onOpenReminders={() => setIsRemindersModalOpen(true)}
             onToggleMobileMenu={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
             onLogout={handleLogout}
           />
@@ -221,6 +269,7 @@ function SalesFlowApp() {
                   isDarkMode={isDarkMode}
                   orgId={impersonatedOrg?.id || currentUser.organization_id}
                   userName={currentUser.name}
+                  centerType={effectiveUser?.center_type}
                   onNavigate={handleNavigate}
                 />
               ) : (
@@ -228,19 +277,20 @@ function SalesFlowApp() {
                   onStartCall={() => { setActivePage('calls'); }}
                   isDarkMode={isDarkMode}
                   userName={currentUser.name}
+                  centerType={effectiveUser?.center_type}
                   onNavigate={(page) => setActivePage(page as Page)}
                 />
               )
             ) : activePage === 'leads' ? (
               <LeadsDashboard
                 isDarkMode={isDarkMode}
-                orgId={impersonatedOrg?.id || currentUser.organization_id}
-                user={currentUser}
+                orgId={effectiveOrgId}
+                user={effectiveUser!}
               />
             ) : activePage === 'pipeline' ? (
               <PipelineDashboard
                 isDarkMode={isDarkMode}
-                currentUser={currentUser}
+                currentUser={effectiveUser!}
               />
             ) : activePage === 'settings' ? (
               <SettingsDashboard
@@ -252,22 +302,27 @@ function SalesFlowApp() {
             ) : activePage === 'tasks' ? (
               <TasksDashboard
                 isDarkMode={isDarkMode}
-                currentUser={currentUser}
+                currentUser={effectiveUser!}
               />
             ) : activePage === 'targets' ? (
               currentUser.type === 'manager' ? (
-                <TargetsDashboard isDarkMode={isDarkMode} orgId={currentUser.organization_id} />
+                <TargetsDashboard isDarkMode={isDarkMode} orgId={effectiveOrgId!} />
               ) : (
                 <PanelDashboard
                   isDarkMode={isDarkMode}
                   onStartCall={(phone, leadId) => startCall(phone, currentUser.id, leadId)}
-                  currentUser={currentUser}
+                  currentUser={effectiveUser!}
                 />
               )
             ) : activePage === 'chat' ? (
               <TeamChatDashboard
                 isDarkMode={isDarkMode}
-                currentUser={currentUser}
+                currentUser={effectiveUser!}
+              />
+            ) : activePage === 'gamification' ? (
+              <GamificationDashboard
+                userId={currentUser.id}
+                orgId={effectiveOrgId}
               />
             ) : (
               // CALLS PAGE - Unified Component with Real Logic
@@ -276,6 +331,7 @@ function SalesFlowApp() {
                 isCallActive={isCallActive}
                 onEndCall={hangup}
                 currentUserId={currentUser.id}
+                orgId={effectiveOrgId}
               />
             )}
 
@@ -286,6 +342,7 @@ function SalesFlowApp() {
           currentUser={currentUser}
           isOpen={isChatDrawerOpen}
           onClose={() => setIsChatDrawerOpen(false)}
+          orgId={effectiveOrgId}
           activeContext={activePage === 'calls' && isCallActive ? {
             type: 'call',
             id: 'c_active',
@@ -299,6 +356,14 @@ function SalesFlowApp() {
           leadId={activeLeadId || ''}
           callDuration={callDuration}
           transcripts={transcripts}
+        />
+
+        {/* Reminders Modal - Rendered at root for proper centering */}
+        <RemindersModal
+          isOpen={isRemindersModalOpen}
+          onClose={() => setIsRemindersModalOpen(false)}
+          userId={currentUser?.id}
+          orgId={effectiveOrgId}
         />
 
       </div>

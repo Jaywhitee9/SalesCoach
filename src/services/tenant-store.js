@@ -81,6 +81,18 @@ class TenantStore {
         return ACCOUNTS[accountId];
     }
 
+    // NEW: Load organization settings from DB
+    async loadOrganizationSettings(organizationId) {
+        try {
+            const DBService = require('./db-service');
+            const settings = await DBService.getOrganizationSettings(organizationId);
+            return settings;
+        } catch (err) {
+            console.error('[TenantStore] Failed to load org settings:', err.message);
+            return { calls_config: {}, stages_config: [] }; // Return empty defaults
+        }
+    }
+
     // Helper to resolve full context from a start event or `To`/`From` number
     resolveContext(callParams) {
         // For now, we assume simple resolution

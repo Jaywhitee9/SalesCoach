@@ -1,4 +1,3 @@
-
 import React from 'react';
 import {
   LayoutDashboard,
@@ -11,26 +10,29 @@ import {
   PieChart,
   Target,
   MessageSquare,
-  X
+  X,
+  Trophy
 } from 'lucide-react';
 
 interface SidebarProps {
-  activePage: 'dashboard' | 'calls' | 'settings' | 'leads' | 'pipeline' | 'tasks' | 'targets' | 'chat';
-  onNavigate: (page: 'dashboard' | 'calls' | 'settings' | 'leads' | 'pipeline' | 'tasks' | 'targets' | 'chat') => void;
+  activePage: 'dashboard' | 'calls' | 'settings' | 'leads' | 'pipeline' | 'tasks' | 'targets' | 'chat' | 'gamification';
+  onNavigate: (page: 'dashboard' | 'calls' | 'settings' | 'leads' | 'pipeline' | 'tasks' | 'targets' | 'chat' | 'gamification') => void;
   userRole: 'rep' | 'manager';
+  centerType?: 'sales' | 'support';
   isOpen: boolean;
   onClose: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ activePage, onNavigate, userRole, isOpen, onClose }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ activePage, onNavigate, userRole, centerType = 'sales', isOpen, onClose }) => {
   const navItems = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'לוח בקרה', page: 'dashboard' as const },
-    { id: 'pipeline', icon: PieChart, label: 'פאנל', page: 'pipeline' as const },
-    { id: 'leads', icon: Users, label: 'לידים', page: 'leads' as const },
+    { id: 'pipeline', icon: PieChart, label: centerType === 'support' ? 'סטטוס' : 'פאנל', page: 'pipeline' as const },
+    { id: 'leads', icon: Users, label: centerType === 'support' ? 'פניות' : 'לידים', page: 'leads' as const },
     { id: 'calls', icon: Phone, label: 'שיחות', page: 'calls' as const },
     { id: 'tasks', icon: CheckSquare, label: 'משימות', page: 'tasks' as const },
     { id: 'chat', icon: MessageSquare, label: 'צ\'אט', page: 'chat' as const },
     { id: 'targets', icon: Target, label: userRole === 'manager' ? 'יעדים' : 'היעדים שלי', page: 'targets' as const },
+    { id: 'gamification', icon: Trophy, label: 'הישגים', page: 'gamification' as const },
     { id: 'reports', icon: BarChart2, label: 'דוחות', page: 'dashboard' as const },
   ];
 
@@ -90,8 +92,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activePage, onNavigate, userRo
                 className={`
                   flex items-center lg:flex-col lg:justify-center w-full lg:aspect-square p-3 lg:p-0 rounded-xl lg:rounded-2xl transition-all duration-300 group relative
                   ${isActive
-                    ? 'bg-white/10 text-white shadow-inner border border-white/5'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}
+                    ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/30'
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'}
                 `}
                 title={item.label}
               >

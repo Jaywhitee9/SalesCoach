@@ -151,7 +151,7 @@ export const useTasks = (organizationId?: string, userId?: string) => {
 
     useEffect(() => {
         fetchTasks();
-    }, []);
+    }, [organizationId, userId]);
 
     return { tasks, loading, error, toggleTask, addTask, refreshTasks: fetchTasks };
 };

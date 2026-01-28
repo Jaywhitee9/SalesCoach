@@ -72,10 +72,34 @@ async function registerAdminRoutes(fastify) {
         preHandler: requirePlatformAdmin
     }, async (request, reply) => {
         try {
-            const { data, error } = await supabaseAdmin.rpc('admin_get_organizations_with_stats');
+            // Fetch organizations directly to ensure we get center_type
+            // RPC 'admin_get_organizations_with_stats' might be outdated
+            const { data, error } = await supabaseAdmin
+                .from('organizations')
+                .select(`
+                    id, 
+                    name, 
+                    created_at, 
+                    plan, 
+                    status, 
+                    center_type,
+                    user_count:profiles!organization_id(count),
+                    lead_count:leads!organization_id(count)
+                `)
+                .order('created_at', { ascending: false });
+
+            // Map counts to flat structure if needed, but the frontend likely expects them flat.
+            // If the frontend expects 'user_count' and 'lead_count' as top-level props, 
+            // we might need to map them. The RPC likely returned them flat.
+            // Let's map them to be safe.
+            const flatData = data ? data.map(org => ({
+                ...org,
+                user_count: org.user_count?.[0]?.count || 0,
+                lead_count: org.lead_count?.[0]?.count || 0
+            })) : [];
 
             if (error) throw error;
-            return { success: true, organizations: data || [] };
+            return { success: true, organizations: flatData };
         } catch (err) {
             console.error('[Admin API] Get Organizations Error:', err.message);
             return reply.code(500).send({ error: err.message });
@@ -87,17 +111,34 @@ async function registerAdminRoutes(fastify) {
         preHandler: requirePlatformAdmin
     }, async (request, reply) => {
         try {
-            const { name } = request.body;
+            const { name, plan = 'free', center_type = 'sales' } = request.body;
             if (!name || typeof name !== 'string' || name.trim().length === 0) {
                 return reply.code(400).send({ error: 'Organization name is required' });
             }
 
-            const { data, error } = await supabaseAdmin.rpc('admin_create_organization', {
-                p_name: name.trim()
-            });
+            // Validate center_type
+            if (!['sales', 'support'].includes(center_type)) {
+                return reply.code(400).send({ error: 'center_type must be sales or support' });
+            }
+
+            // Validate plan
+            if (!['free', 'pro', 'enterprise'].includes(plan)) {
+                return reply.code(400).send({ error: 'plan must be free, pro, or enterprise' });
+            }
+
+            // Insert organization directly (works with or without center_type column)
+            const { data, error } = await supabaseAdmin
+                .from('organizations')
+                .insert({
+                    name: name.trim(),
+                    plan: plan,
+                    center_type: center_type
+                })
+                .select('id')
+                .single();
 
             if (error) throw error;
-            return { success: true, organizationId: data };
+            return { success: true, organizationId: data.id };
         } catch (err) {
             console.error('[Admin API] Create Organization Error:', err.message);
             return reply.code(500).send({ error: err.message });
@@ -358,7 +399,8 @@ async function registerAdminRoutes(fastify) {
                     expires_at,
                     accepted_at,
                     invited_by,
-                    inviter:invited_by(full_name)
+                    inviter:invited_by(full_name),
+                    organization:organization_id(center_type)
                 `)
                 .eq('organization_id', orgId)
                 .order('created_at', { ascending: false });

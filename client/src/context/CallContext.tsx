@@ -19,6 +19,7 @@ interface CoachingData {
         objections?: { text: string; status?: 'open' | 'handled' }[];
         gaps?: { text: string }[];
         vision?: { text: string }[];
+        bridges?: { text: string; sentiment?: 'positive' | 'skeptical' | 'neutral' }[];
     };
     stageStatus?: { [key: string]: 'completed' | 'current' | 'upcoming' };
     next_actions?: string[];
@@ -80,6 +81,10 @@ interface CallContextType {
     pausePowerDialer: () => void;
     resumePowerDialer: () => void;
     skipToNextLead: () => void;
+    // Smart Queue Logic
+    smartQueue: PowerDialerLead[];
+    setSmartQueue: (queue: PowerDialerLead[]) => void;
+    dialNextLead: () => Promise<void>;
 }
 
 const CallContext = createContext<CallContextType | null>(null);
@@ -144,6 +149,8 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         previewCountdown: 0,
         isInPreview: false
     });
+    // Global Smart Queue State
+    const [smartQueue, setSmartQueue] = useState<PowerDialerLead[]>([]);
     const powerDialerRef = useRef<PowerDialerState>(powerDialer);
     const previewTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -655,6 +662,14 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 formattedPhone = '+' + formattedPhone;
             }
 
+            console.log('[CallContext] Starting call trigger:', { formattedPhone, deviceStatus: !!device, readyState: device?.state });
+
+            if (!device) {
+                console.error('[CallContext] Start Call Failed: Device not initialized');
+                alert('מערכת הטלפון לא מוכנה. נסה לרענן את הדף.');
+                return;
+            }
+
             console.log('[CallContext] Starting call to:', formattedPhone);
 
             // 1. MIC PERMISSION CHECK (Instruction #3)
@@ -688,17 +703,69 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 connectWS(sid);
             });
 
-            call.on('disconnect', () => {
+            call.on('disconnect', async () => {
                 console.log('Call Disconnected');
                 setIsOnCall(false);
                 setCallStatus('idle');
                 setActiveCall(null);
                 // DO NOT RESET activeLeadId - User wants to stay on lead
 
+                // === AUTO-RETRY LOGIC ===
+                // If call was very short (< 15 seconds), likely unanswered - schedule retry
+                const currentDuration = callDuration;
+                const currentLeadId = activeLeadId;
+
+                if (currentLeadId && currentDuration < 15) {
+                    console.log('[AutoRetry] Short call detected, scheduling retry:', {
+                        leadId: currentLeadId,
+                        duration: currentDuration
+                    });
+
+                    try {
+                        // Get organization ID
+                        const { data: { session } } = await supabase.auth.getSession();
+                        let orgId = session?.user?.user_metadata?.organization_id;
+                        if (!orgId && session?.user?.id) {
+                            const { data: profile } = await supabase
+                                .from('profiles')
+                                .select('organization_id')
+                                .eq('id', session.user.id)
+                                .single();
+                            orgId = profile?.organization_id;
+                        }
+
+                        if (orgId) {
+                            // Record the attempt and schedule next retry
+                            await fetch(`/api/leads/${currentLeadId}/record-attempt`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    disposition: 'no_answer',
+                                    organizationId: orgId
+                                })
+                            });
+                            console.log('[AutoRetry] ✅ Retry scheduled for lead:', currentLeadId);
+                        }
+                    } catch (err) {
+                        console.warn('[AutoRetry] Failed to schedule retry:', err);
+                    }
+                }
+
                 // P0: Auto-open summary modal immediately
                 console.log('[Summary] modalOpened, summaryStatus=generating');
                 setSummaryStatus('generating');
                 setShowSummaryModal(true);
+
+                // Timeout: If summary doesn't arrive in 15 seconds, mark as ready (with what we have)
+                setTimeout(() => {
+                    setSummaryStatus(prev => {
+                        if (prev === 'generating') {
+                            console.log('[Summary] Timeout - marking as ready with available data');
+                            return 'ready';
+                        }
+                        return prev;
+                    });
+                }, 15000);
             });
 
             call.on('error', (err: any) => {
@@ -756,6 +823,40 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setSummaryStatus('pending');
         setCallSessionId(null);
         console.log('[Summary] Modal dismissed, states reset');
+    };
+
+    // P0: Dial Next Lead (Quick Disposition)
+    const dialNextLead = async () => {
+        if (smartQueue.length === 0) {
+            console.log('[CallContext] Queue empty, cannot dial next.');
+            return;
+        }
+
+        // Get next lead
+        const nextLead = smartQueue[0];
+        const remainingQueue = smartQueue.slice(1);
+
+        console.log('⚡ Dialing Next Lead:', nextLead.name);
+
+        // Update Queue
+        setSmartQueue(remainingQueue);
+
+        // Set Active
+        setActiveLeadId(nextLead.id);
+
+        // Close any modals
+        setShowSummaryModal(false);
+
+        // Start Call
+        if (nextLead.phone) {
+            // Small delay to allow UI to settle
+            setTimeout(() => {
+                startCall(nextLead.phone, undefined, nextLead.id);
+            }, 500);
+        } else {
+            console.warn('Next lead has no phone:', nextLead);
+            alert('לליד הבא אין מספר טלפון תקין');
+        }
     };
 
     // Show last call summary
@@ -942,7 +1043,11 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             stopPowerDialer,
             pausePowerDialer,
             resumePowerDialer,
-            skipToNextLead
+            skipToNextLead,
+            // Smart Queue
+            smartQueue,
+            setSmartQueue,
+            dialNextLead
         }}>
             {children}
         </CallContext.Provider>

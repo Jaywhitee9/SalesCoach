@@ -36,3 +36,8 @@ yarn-error.log*
 *.zip
 backups/
 react-client-backup/
+
+# App Logs
+server.log
+ngrok.log
+tunnel.log

@@ -31,23 +31,32 @@ import {
    Building2,
    Square,
    SkipForward,
-   Repeat
+   Repeat,
+   Zap,
+   AlertTriangle,
+   ShieldAlert,
+   GitMerge,
+   Target
 } from 'lucide-react';
 import { Badge } from '../Common/Badge';
 import { Lead } from '../../types';
+import { DraggableCallScript } from './DraggableCallScript';
+import { QuickActionsBar } from './QuickActionsBar';
+import { FollowUpAlert } from '../Common/FollowUpAlert';
+import { GamificationWidget } from '../Gamification/GamificationWidget';
 
 // Logic Injection
-import { useCall } from '../../src/context/CallContext';
 import { supabase } from '../../src/lib/supabaseClient';
+import { useCall } from '../../src/context/CallContext';
 
 interface EmptyCallStateProps {
    onStartCall: () => void;
    isCallActive?: boolean;
    onEndCall?: () => void;
    currentUserId?: string;
+   orgId?: string;
 }
 
-// Mock KPI Data
 // KPI types - will be fetched from API
 interface DailyStats {
    calls: { answered: number; total: number };
@@ -56,11 +65,23 @@ interface DailyStats {
    avgCallTime: number;
 }
 
-export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onEndCall, currentUserId }) => {
-   const [activeTab, setActiveTab] = useState<'followup' | 'search'>('followup');
+// ... (existing props interface)
+
+// ... (existing constants)
+
+export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onEndCall, currentUserId, orgId }) => {
+   // Right sidebar tabs (leads list vs history)
+   const [rightSidebarTab, setRightSidebarTab] = useState<'leads' | 'history'>('leads');
+   // Left sidebar / KPI tabs (followup tasks vs smart queue)
+   const [leftSidebarTab, setLeftSidebarTab] = useState<'followup' | 'queue'>('followup');
    // const [activeLeadId, setActiveLeadId] = useState<string | null>(null); // MOVED TO CONTEXT
    const [campaign, setCampaign] = useState<string>('');
    const scrollRef = useRef<HTMLDivElement>(null);
+
+   // Logic Injection
+   const [isStartingPower, setIsStartingPower] = useState(false);
+
+   // ... (keep rest)
 
    // Responsive Drawer States
    const [isQueueOpen, setIsQueueOpen] = useState(false);
@@ -72,6 +93,7 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
    const [isLoadingLeads, setIsLoadingLeads] = useState(true);
    const [isLoadingCalls, setIsLoadingCalls] = useState(true);
    const [searchQuery, setSearchQuery] = useState('');
+   const [followUpTasks, setFollowUpTasks] = useState<any[]>([]);
 
    // Error Toast State
    const [errorToast, setErrorToast] = useState<string | null>(null);
@@ -96,6 +118,9 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
    const [historyFollowUpTime, setHistoryFollowUpTime] = useState('10:00');
    const [historyFollowUpNotes, setHistoryFollowUpNotes] = useState('');
 
+   // Call Script visibility state
+   const [showCallScript, setShowCallScript] = useState(false);
+
    // --- LOGIC HOOK ---
    const {
       callStatus,
@@ -118,8 +143,53 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
       stopPowerDialer,
       pausePowerDialer,
       resumePowerDialer,
-      skipToNextLead
+      skipToNextLead,
+      // Smart Queue (Global)
+      smartQueue,
+      setSmartQueue,
+      dialNextLead
    } = useCall();
+   // const isCallActive = callStatus === 'connected' || callStatus === 'dialing'; // REMOVED DUPLICATE
+
+   // Local loading state for the fetch
+   const [loadingQueue, setLoadingQueue] = useState(false);
+
+   // Fetch Smart Queue (Updates Global Context)
+   const fetchSmartQueue = async () => {
+      if (!orgId) return;
+      setLoadingQueue(true);
+      try {
+         const { data: { session } } = await supabase.auth.getSession();
+         const res = await fetch(`/api/leads/smart-queue?organizationId=${orgId}&userId=${currentUserId}`, {
+            headers: { 'Authorization': `Bearer ${session?.access_token}` }
+         });
+         const data = await res.json();
+         if (data.success) {
+            setSmartQueue(data.queue); // Update Global Context
+         }
+      } catch (err) {
+         console.error('Failed to fetch smart queue', err);
+      } finally {
+         setLoadingQueue(false);
+      }
+   };
+
+   // Handle Power Session Start
+   // Handle Power Session Start
+   const startPowerSession = async () => {
+      if (smartQueue.length > 0) {
+         setIsStartingPower(true);
+         console.log('[PowerSession] Starting with queue size:', smartQueue.length);
+         // Just trigger the first one via the new context method, or manually start first and let context handle next
+         // Let's use the explicit logic here for the FIRST one to ensure UI feedback
+         await dialNextLead();
+         onStartCall(); // Switch UI
+         setIsStartingPower(false);
+      } else {
+         console.warn('[PowerSession] Cannot start: Queue is empty');
+         setErrorToast('אין לידים בתור לחיוג אוטומטי');
+      }
+   };
    const isCallActive = callStatus === 'connected' || callStatus === 'dialing';
 
    const getSourceLabel = (source?: string | null) => {
@@ -175,11 +245,13 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
    // --- FETCH REAL LEADS FROM DB ---
    useEffect(() => {
       const fetchLeads = async () => {
+         if (!orgId) return;
          setIsLoadingLeads(true);
          try {
             const { data, error } = await supabase
                .from('leads')
                .select('id, name, phone, company, status, priority, source, created_at')
+               .eq('organization_id', orgId)
                .order('created_at', { ascending: false })
                .limit(20);
 
@@ -194,18 +266,61 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
       };
 
       fetchLeads();
-   }, []);
+   }, [orgId]);
+
+   // --- FETCH SMART QUEUE ---
+   useEffect(() => {
+      fetchSmartQueue();
+   }, [orgId]);
+
+   // --- FETCH FOLLOW UP TASKS ---
+   useEffect(() => {
+      const fetchFollowUpTasks = async () => {
+         if (!orgId) return;
+         try {
+            // Get leads with follow_up_at set for today or past (needs follow-up)
+            const today = new Date();
+            today.setHours(23, 59, 59, 999);
+
+            const { data, error } = await supabase
+               .from('leads')
+               .select('id, name, phone, follow_up_at, follow_up_notes')
+               .eq('organization_id', orgId)
+               .not('follow_up_at', 'is', null)
+               .lte('follow_up_at', today.toISOString())
+               .order('follow_up_at', { ascending: true })
+               .limit(20);
+
+            if (error) throw error;
+
+            setFollowUpTasks((data || []).map(lead => ({
+               id: lead.id,
+               lead_id: lead.id,
+               lead_name: lead.name,
+               lead_phone: lead.phone,
+               follow_up_at: lead.follow_up_at,
+               notes: lead.follow_up_notes
+            })));
+         } catch (err) {
+            console.error('[FollowUp] Fetch error:', err);
+         }
+      };
+
+      fetchFollowUpTasks();
+   }, [orgId]);
 
    // --- FETCH RECENT CALLS FROM DB ---
    useEffect(() => {
       const fetchCalls = async () => {
+         if (!orgId) return;
          setIsLoadingCalls(true);
          try {
             const { data, error } = await supabase
                .from('calls')
-               .select('id, agent_id, lead_id, status, duration, created_at, leads(name, phone, company)')
+               .select('id, agent_id, lead_id, status, duration, created_at, recording_url, transcript, leads(name, phone, company)')
+               .eq('organization_id', orgId)
                .order('created_at', { ascending: false })
-               .limit(15);
+               .limit(20);
 
             if (error) throw error;
             setRecentCalls(data || []);
@@ -217,7 +332,7 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
       };
 
       fetchCalls();
-   }, []);
+   }, [orgId]);
 
    // --- FETCH DAILY STATS FOR KPIs ---
    useEffect(() => {
@@ -306,7 +421,8 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
          console.log('[Dialer] Initializing Twilio Device...');
          initDevice();
       }
-   }, [isReady, connectionStatus, initDevice]);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+   }, [isReady, connectionStatus]);
 
    // Error toast auto-dismiss
    useEffect(() => {
@@ -362,10 +478,10 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
       }
    };
 
-   // --- CAMPAIGN DIALER (POWER DIALER) ---
-   // Filter leads by selected campaign's source and start continuous dialing
+   // --- SMART CAMPAIGN DIALER (POWER DIALER) ---
+   // Builds prioritized queue: Follow-ups → Retries → Regular leads
    const handleStartDialer = async () => {
-      console.log('[PowerDialer] Starting campaign dialer:', { campaign, campaignsCount: campaigns.length });
+      console.log('[SmartDialer] Starting smart campaign dialer:', { campaign, campaignsCount: campaigns.length });
 
       if (!campaign) {
          setErrorToast('בחר קמפיין לפני הפעלת החייגן');
@@ -379,50 +495,138 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
          return;
       }
 
-      console.log('[PowerDialer] Selected campaign:', { name: selectedCampaign.name, source: selectedCampaign.source_filter });
+      // Get organization ID from session
+      const { data: { session } } = await supabase.auth.getSession();
+      const organizationId = session?.user?.user_metadata?.organization_id;
 
-      // Filter leads by campaign's source filter
+      // Also try to get from profile if not in metadata
+      let orgId = organizationId;
+      if (!orgId && session?.user?.id) {
+         const { data: profile } = await supabase
+            .from('profiles')
+            .select('organization_id')
+            .eq('id', session.user.id)
+            .single();
+         orgId = profile?.organization_id;
+      }
+
+      console.log('[SmartDialer] Organization ID:', orgId);
+      console.log('[SmartDialer] Selected campaign:', { name: selectedCampaign.name, source: selectedCampaign.source_filter });
+
+      // === STEP 1: Fetch Priority Leads in Parallel ===
+      let followUpLeads: any[] = [];
+      let retryLeads: any[] = [];
+
+      if (orgId) {
+         try {
+            const [followUpsRes, retryRes] = await Promise.all([
+               fetch(`/api/follow-ups/due?organizationId=${orgId}`),
+               fetch(`/api/leads/ready-for-retry?organizationId=${orgId}&campaignId=${campaign}`)
+            ]);
+
+            const followUpsData = await followUpsRes.json();
+            const retryData = await retryRes.json();
+
+            if (followUpsData.success) {
+               followUpLeads = followUpsData.followUps || [];
+               console.log('[SmartDialer] 🔴 Follow-ups due:', followUpLeads.length);
+            }
+
+            if (retryData.success) {
+               retryLeads = retryData.leads || [];
+               console.log('[SmartDialer] 🟠 Retry leads:', retryLeads.length);
+            }
+         } catch (err) {
+            console.warn('[SmartDialer] Failed to fetch priority leads, continuing with regular leads:', err);
+         }
+      }
+
+      // === STEP 2: Get Regular Campaign Leads ===
       const matchingLeads = leads.filter(lead => {
-         // Case-insensitive source matching
          const leadSource = (lead.source || '').toLowerCase().trim();
          const campaignSource = (selectedCampaign.source_filter || '').toLowerCase().trim();
          return campaignSource === '' || leadSource === campaignSource;
       });
 
-      console.log('[PowerDialer] Matching leads:', { count: matchingLeads.length, total: leads.length });
-
-      if (matchingLeads.length === 0) {
-         setErrorToast(`אין לידים מתאימים לקמפיין "${selectedCampaign.name}" (מקור: ${selectedCampaign.source_filter})`);
-         return;
-      }
-
-      // Filter out leads that already have 'Won' or 'Lost' status
+      // Filter out closed leads
       const callableLeads = matchingLeads.filter(lead =>
          lead.status !== 'Won' && lead.status !== 'Lost'
       );
 
-      if (callableLeads.length === 0) {
-         setErrorToast(`כל הלידים בקמפיין "${selectedCampaign.name}" כבר טופלו`);
+      console.log('[SmartDialer] 🟢 Regular campaign leads:', callableLeads.length);
+
+      // === STEP 3: Build Smart Priority Queue ===
+      // Track IDs we've already added to avoid duplicates
+      const addedIds = new Set<string>();
+      const priorityQueue: any[] = [];
+
+      // Add follow-ups first (highest priority)
+      for (const lead of followUpLeads) {
+         if (!addedIds.has(lead.id)) {
+            priorityQueue.push({
+               ...lead,
+               _priority: 'follow_up',
+               _priorityLabel: '🔴 פולואפ'
+            });
+            addedIds.add(lead.id);
+         }
+      }
+
+      // Add retry leads second
+      for (const lead of retryLeads) {
+         if (!addedIds.has(lead.id)) {
+            priorityQueue.push({
+               ...lead,
+               _priority: 'retry',
+               _priorityLabel: '🟠 ניסיון חוזר'
+            });
+            addedIds.add(lead.id);
+         }
+      }
+
+      // Add regular campaign leads last
+      for (const lead of callableLeads) {
+         if (!addedIds.has(lead.id)) {
+            priorityQueue.push({
+               ...lead,
+               _priority: 'regular',
+               _priorityLabel: '🟢 רגיל'
+            });
+            addedIds.add(lead.id);
+         }
+      }
+
+      // === STEP 4: Validate Queue ===
+      if (priorityQueue.length === 0) {
+         setErrorToast(`אין לידים לחייג בקמפיין "${selectedCampaign.name}"`);
          return;
       }
 
-      console.log('[PowerDialer] Starting with', callableLeads.length, 'leads in queue');
+      console.log('[SmartDialer] ✨ Smart Queue built:', {
+         total: priorityQueue.length,
+         followUps: priorityQueue.filter(l => l._priority === 'follow_up').length,
+         retries: priorityQueue.filter(l => l._priority === 'retry').length,
+         regular: priorityQueue.filter(l => l._priority === 'regular').length
+      });
 
-      // Convert to PowerDialerLead format
-      const powerDialerLeads = callableLeads.map(lead => ({
+      // === STEP 5: Convert to PowerDialer Format and Start ===
+      const powerDialerLeads = priorityQueue.map(lead => ({
          id: lead.id,
-         name: lead.name,
+         name: lead.name || lead.full_name,
          phone: lead.phone || '',
          source: lead.source,
          status: lead.status,
-         company: lead.company
+         company: lead.company,
+         priority: lead._priority,
+         priorityLabel: lead._priorityLabel
       }));
 
-      // Start Power Dialer with the full queue
+      // Start Power Dialer with smart queue
       startPowerDialer(powerDialerLeads);
 
       // Start first call immediately
-      const firstLead = callableLeads[0];
+      const firstLead = priorityQueue[0];
+      console.log('[SmartDialer] 📞 Starting first call:', { name: firstLead.name, priority: firstLead._priorityLabel });
       await startCallFromLead(firstLead);
    };
 
@@ -460,17 +664,16 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
 
    const currentLead = activeLeadId ? leads.find(l => l.id === activeLeadId) : null;
 
-   console.log('[EmptyCallState] Render:', {
-      activeLeadId,
-      leadsCount: leads.length,
-      currentLeadFound: !!currentLead,
-      isCallActive,
-      leadIds: leads.map(l => l.id)
-   });
+   // Debug log commented out for performance
+   // console.log('[EmptyCallState] Render:', { activeLeadId, leadsCount: leads.length });
 
-   // Filter leads by search
+   // Filter leads by search (name, phone, or company)
    const filteredLeads = searchQuery
-      ? leads.filter(l => l.name?.toLowerCase().includes(searchQuery.toLowerCase()) || l.phone?.includes(searchQuery))
+      ? leads.filter(l =>
+         l.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+         l.phone?.includes(searchQuery) ||
+         l.company?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
       : leads;
 
    return (
@@ -557,6 +760,14 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
             </div>
          )}
 
+
+         {/* Draggable Call Script */}
+         <DraggableCallScript
+            isVisible={showCallScript && isCallActive}
+            onClose={() => setShowCallScript(false)}
+            campaignName={campaigns.find(c => c.id === campaign)?.name}
+            leadName={currentLead?.name}
+         />
          {/* Mobile Backdrop */}
          {(isQueueOpen || isKPIOpen) && (
             <div
@@ -592,16 +803,16 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
                {/* Tabs */}
                <div className="flex bg-[#F0F2F5] p-1 rounded-xl mb-3">
                   <button
-                     onClick={() => setActiveTab('followup')}
+                     onClick={() => setRightSidebarTab('leads')}
                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all border border-transparent
-                        ${activeTab === 'followup' ? 'bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)] text-[#0B1220]' : 'text-[#667085] hover:text-[#0B1220]'}`}
+                        ${rightSidebarTab === 'leads' ? 'bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)] text-[#0B1220]' : 'text-[#667085] hover:text-[#0B1220]'}`}
                   >
                      לידים ({leads.length})
                   </button>
                   <button
-                     onClick={() => setActiveTab('search')}
+                     onClick={() => setRightSidebarTab('history')}
                      className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all
-                        ${activeTab === 'search' ? 'bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)] text-[#0B1220]' : 'text-[#667085] hover:text-[#0B1220]'}`}
+                        ${rightSidebarTab === 'history' ? 'bg-white shadow-[0_1px_2px_rgba(0,0,0,0.05)] text-[#0B1220]' : 'text-[#667085] hover:text-[#0B1220]'}`}
                   >
                      היסטוריה ({recentCalls.length})
                   </button>
@@ -622,7 +833,7 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
 
             {/* Lead List / Calls History */}
             <div className="flex-1 overflow-y-auto p-3 space-y-2">
-               {activeTab === 'followup' ? (
+               {rightSidebarTab === 'leads' ? (
                   // LEADS TAB - Real DB Data
                   isLoadingLeads ? (
                      <div className="space-y-3">
@@ -746,6 +957,33 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
                            {/* Expanded Content - Transcript */}
                            {expandedCallId === call.id && (
                               <div className="border-t border-slate-100 p-3.5 bg-slate-50/50 space-y-3 animate-in slide-in-from-top-2">
+                                 {/* Recording Section */}
+                                 {call.recording_url && !call.recording_url.startsWith('sid:') && (
+                                    <div className="space-y-2">
+                                       <h4 className="text-xs font-bold text-slate-500 flex items-center gap-1.5">
+                                          <Play className="w-3 h-3" />
+                                          הקלטת שיחה
+                                       </h4>
+                                       <div className="flex items-center gap-2">
+                                          <audio
+                                             controls
+                                             className="flex-1 h-8"
+                                             src={call.recording_url}
+                                          >
+                                             הדפדפן שלך לא תומך בנגן אודיו
+                                          </audio>
+                                          <a
+                                             href={call.recording_url}
+                                             download
+                                             className="p-2 rounded-lg bg-white border border-slate-200 hover:bg-slate-100 transition-colors"
+                                             title="הורד הקלטה"
+                                          >
+                                             <Download className="w-4 h-4 text-slate-500" />
+                                          </a>
+                                       </div>
+                                    </div>
+                                 )}
+
                                  {/* Transcript Section */}
                                  {call.transcript ? (
                                     <div className="space-y-2">
@@ -922,6 +1160,14 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
                                  <Phone className="w-4 h-4" />
                                  חייג עכשיו
                               </button>
+
+                              {/* Quick Actions for Lead */}
+                              <QuickActionsBar
+                                 leadPhone={currentLead?.phone}
+                                 leadName={currentLead?.name}
+                                 leadEmail={currentLead?.email}
+                                 className="hidden md:flex"
+                              />
                            </div>
 
                            {/* Chat / Transcript History Area - History Mode */}
@@ -1118,6 +1364,16 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
                         {currentLead && <span className="text-sm text-slate-500">• {currentLead.name}</span>}
                      </div>
                      <div className="flex gap-2">
+                        <button
+                           onClick={() => setShowCallScript(!showCallScript)}
+                           className={`p-2 rounded-lg border transition-colors ${showCallScript
+                              ? 'bg-brand-50 border-brand-200 text-brand-600'
+                              : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                              }`}
+                           title="תסריט שיחה"
+                        >
+                           <FileText className="w-5 h-5" />
+                        </button>
                         <button className="p-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors">
                            <PauseCircle className="w-5 h-5" />
                         </button>
@@ -1127,6 +1383,16 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
                         </button>
                      </div>
                   </div>
+
+                  {/* Quick Actions */}
+                  <QuickActionsBar
+                     leadPhone={currentLead?.phone}
+                     leadName={currentLead?.name}
+                     leadEmail={currentLead?.email}
+                     className="bg-white rounded-xl border border-slate-200 p-3"
+                     callTranscript={transcripts.map((t: any) => `${t.speaker}: ${t.text}`).join('\n')}
+                     callSummary={coachingData}
+                  />
 
                   {/* BOTTOM HALF: Coach & Transcript */}
                   <div className="flex-1 flex flex-col lg:flex-row gap-4 min-h-0">
@@ -1161,31 +1427,140 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
                         </div>
                      </div>
 
-                     {/* b) AI Coach Panel */}
-                     <div className="w-full lg:w-80 bg-white rounded-2xl border border-[#E7EAF2] shadow-sm flex flex-col overflow-hidden shrink-0">
-                        <div className="p-4 md:p-5 border-b border-[#E7EAF2] bg-gradient-to-r from-white to-[#F9FAFB]">
+                     {/* b) AI Coach Panel - ENHANCED */}
+                     <div className="w-full lg:w-96 bg-white rounded-2xl border border-[#E7EAF2] shadow-sm flex flex-col overflow-hidden shrink-0 max-h-[calc(100vh-200px)]">
+                        {/* Header */}
+                        <div className="p-4 border-b border-[#E7EAF2] bg-gradient-to-r from-[#6366f1]/5 to-white flex items-center justify-between">
                            <h3 className="text-sm font-bold text-[#0B1220] flex items-center gap-2">
                               <Sparkles className="w-4 h-4 text-purple-600 fill-purple-600" />
                               מאמן AI – Sales Coach
                            </h3>
+                           <div className="flex items-center gap-1.5 px-2 py-1 bg-emerald-50 rounded-full">
+                              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                              <span className="text-[10px] font-bold text-emerald-700">Live</span>
+                           </div>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-6">
-                           {/* Recommendation Box */}
-                           <div className="bg-gradient-to-br from-[#EEF2FF] to-white border border-[#E0E7FF] rounded-xl p-4 md:p-5 shadow-[0_2px_8px_rgba(99,102,241,0.05)] relative overflow-hidden group">
-                              <div className="absolute top-0 right-0 w-20 h-20 bg-brand-500/5 rounded-full blur-2xl -mr-6 -mt-6"></div>
-                              <h4 className="text-[11px] font-extrabold text-brand-800 uppercase tracking-wider mb-3 relative z-10 flex items-center gap-1.5">
-                                 <div className="w-1.5 h-1.5 bg-brand-500 rounded-full animate-pulse"></div>
-                                 Live Insights
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+                           {/* 🎯 Main Tip Box - Most Prominent */}
+                           <div className="bg-gradient-to-br from-[#6366f1] to-[#4f46e5] rounded-xl p-4 text-white relative overflow-hidden shadow-lg">
+                              <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full blur-2xl -mr-8 -mt-8"></div>
+                              <h4 className="text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5 opacity-90">
+                                 <Zap className="w-3.5 h-3.5" />
+                                 טיפ עכשיו
                               </h4>
-                              <p className="text-sm text-slate-600 mb-2">{coachingData?.insight || 'מאזין לשיחה...'}</p>
+                              <p className="text-sm leading-relaxed font-medium">
+                                 {coachingData?.insight || 'מאזין לשיחה...'}
+                              </p>
+
+                              {/* Suggested Reply */}
                               {coachingData?.suggestion && (
-                                 <div className="mt-3 p-3 bg-white/80 rounded-lg border border-brand-100">
-                                    <span className="text-xs font-bold text-brand-700">💡 הצעה:</span>
-                                    <p className="text-sm text-brand-800 mt-1">{coachingData.suggestion}</p>
+                                 <div className="mt-3 p-3 bg-white/15 backdrop-blur rounded-lg border border-white/20">
+                                    <span className="text-[10px] font-bold uppercase tracking-wide opacity-80">💬 אמור:</span>
+                                    <p className="text-sm mt-1 leading-relaxed">"{coachingData.suggestion}"</p>
                                  </div>
                               )}
                            </div>
+
+                           {/* 📊 Signals Grid */}
+                           <div className="grid grid-cols-2 gap-3">
+
+                              {/* Pains / כאבים */}
+                              <div className="bg-rose-50 border border-rose-100 rounded-xl p-3">
+                                 <h5 className="text-[10px] font-bold text-rose-700 uppercase tracking-wide mb-2 flex items-center gap-1">
+                                    <AlertTriangle className="w-3 h-3" />
+                                    כאבים
+                                 </h5>
+                                 {coachingData?.signals?.pains && coachingData.signals.pains.length > 0 ? (
+                                    <ul className="space-y-1.5">
+                                       {coachingData.signals.pains.slice(0, 3).map((pain: any, i: number) => (
+                                          <li key={i} className="text-xs text-rose-800 flex items-start gap-1.5">
+                                             <span className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${pain.severity === 'high' ? 'bg-rose-600' :
+                                                pain.severity === 'medium' ? 'bg-rose-400' : 'bg-rose-300'
+                                                }`}></span>
+                                             {pain.text}
+                                          </li>
+                                       ))}
+                                    </ul>
+                                 ) : (
+                                    <p className="text-[10px] text-rose-400 italic">לא זוהו עדיין</p>
+                                 )}
+                              </div>
+
+                              {/* Objections / התנגדויות */}
+                              <div className="bg-amber-50 border border-amber-100 rounded-xl p-3">
+                                 <h5 className="text-[10px] font-bold text-amber-700 uppercase tracking-wide mb-2 flex items-center gap-1">
+                                    <ShieldAlert className="w-3 h-3" />
+                                    התנגדויות
+                                 </h5>
+                                 {coachingData?.signals?.objections && coachingData.signals.objections.length > 0 ? (
+                                    <ul className="space-y-1.5">
+                                       {coachingData.signals.objections.slice(0, 3).map((obj: any, i: number) => (
+                                          <li key={i} className={`text-xs flex items-start gap-1.5 ${obj.status === 'handled' ? 'text-emerald-700 line-through opacity-60' : 'text-amber-800'
+                                             }`}>
+                                             <span className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${obj.status === 'handled' ? 'bg-emerald-500' : 'bg-amber-500'
+                                                }`}></span>
+                                             {obj.text}
+                                          </li>
+                                       ))}
+                                    </ul>
+                                 ) : (
+                                    <p className="text-[10px] text-amber-400 italic">לא זוהו עדיין</p>
+                                 )}
+                              </div>
+
+                              {/* Gaps / פערים */}
+                              <div className="bg-blue-50 border border-blue-100 rounded-xl p-3">
+                                 <h5 className="text-[10px] font-bold text-blue-700 uppercase tracking-wide mb-2 flex items-center gap-1">
+                                    <GitMerge className="w-3 h-3" />
+                                    פערים
+                                 </h5>
+                                 {coachingData?.signals?.gaps && coachingData.signals.gaps.length > 0 ? (
+                                    <ul className="space-y-1.5">
+                                       {coachingData.signals.gaps.slice(0, 3).map((gap: any, i: number) => (
+                                          <li key={i} className="text-xs text-blue-800 flex items-start gap-1.5">
+                                             <span className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 bg-blue-500"></span>
+                                             {gap.text}
+                                          </li>
+                                       ))}
+                                    </ul>
+                                 ) : (
+                                    <p className="text-[10px] text-blue-400 italic">לא זוהו עדיין</p>
+                                 )}
+                              </div>
+
+                              {/* Vision / חזון */}
+                              <div className="bg-purple-50 border border-purple-100 rounded-xl p-3">
+                                 <h5 className="text-[10px] font-bold text-purple-700 uppercase tracking-wide mb-2 flex items-center gap-1">
+                                    <Target className="w-3 h-3" />
+                                    חזון הלקוח
+                                 </h5>
+                                 {coachingData?.signals?.vision && coachingData.signals.vision.length > 0 ? (
+                                    <ul className="space-y-1.5">
+                                       {coachingData.signals.vision.slice(0, 3).map((vis: any, i: number) => (
+                                          <li key={i} className="text-xs text-purple-800 flex items-start gap-1.5">
+                                             <span className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 bg-purple-500"></span>
+                                             {vis.text}
+                                          </li>
+                                       ))}
+                                    </ul>
+                                 ) : (
+                                    <p className="text-[10px] text-purple-400 italic">לא זוהו עדיין</p>
+                                 )}
+                              </div>
+                           </div>
+
+                           {/* Stage Indicator */}
+                           {coachingData?.stage && (
+                              <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+                                 <span className="text-xs text-slate-500">שלב נוכחי:</span>
+                                 <span className="text-xs font-bold text-slate-800 px-2 py-1 bg-white rounded-lg border border-slate-200">
+                                    {coachingData.stage}
+                                 </span>
+                              </div>
+                           )}
+
                         </div>
                      </div>
 
@@ -1204,6 +1579,128 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
             <div className="p-4 border-b border-[#E7EAF2]">
                <h2 className="font-bold text-[#0B1220]">מדדים יומיים</h2>
             </div>
+            {/* Sidebar Tabs */}
+            <div className="flex border-b border-slate-200 dark:border-slate-800 px-4">
+               <button
+                  onClick={() => setLeftSidebarTab('followup')}
+                  className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${leftSidebarTab === 'followup'
+                     ? 'border-brand-500 text-brand-600 dark:text-brand-400'
+                     : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                     }`}
+               >
+                  משימות לביצוע
+               </button>
+               <button
+                  onClick={() => setLeftSidebarTab('queue')}
+                  className={`flex-1 py-3 text-sm font-medium border-b-2 transition-colors ${leftSidebarTab === 'queue'
+                     ? 'border-brand-500 text-brand-600 dark:text-brand-400'
+                     : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300'
+                     }`}
+               >
+                  <div className="flex items-center justify-center gap-2">
+                     <Sparkles className="w-3.5 h-3.5" />
+                     <span>תור חכם</span>
+                  </div>
+               </button>
+
+            </div>
+
+            {/* Sidebar Content */}
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+
+               {/* --- SMART QUEUE TAB --- */}
+               {leftSidebarTab === 'queue' && (
+                  <div className="space-y-4">
+                     <div className="bg-brand-50 dark:bg-brand-900/20 p-4 rounded-xl border border-brand-100 dark:border-brand-800/50">
+                        <h3 className="font-bold text-brand-900 dark:text-brand-100 mb-1">Power Dialer ⚡</h3>
+                        <p className="text-xs text-brand-700 dark:text-brand-300 mb-3">
+                           המערכת תעדפה עבורך {smartQueue.length} לידים חמים. התחל חיוג ברצף לחיסכון בזמן.
+                        </p>
+                        <button
+                           onClick={startPowerSession}
+                           disabled={isStartingPower}
+                           className={`w-full py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-medium shadow-sm shadow-brand-200 dark:shadow-none transition-all active:scale-[0.98] flex items-center justify-center gap-2 ${isStartingPower ? 'opacity-70 cursor-not-allowed' : ''}`}
+                        >
+                           {isStartingPower ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
+                           {isStartingPower ? 'מתחיל חיוג...' : 'התחל סשן חיוג'}
+                        </button>
+                     </div>
+
+                     {loadingQueue ? (
+                        <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-slate-400" /></div>
+                     ) : smartQueue.length === 0 ? (
+                        <div className="text-center py-8 text-slate-500 text-sm">התור ריק! עבודה מעולה 🎉</div>
+                     ) : (
+                        <div className="space-y-2">
+                           {smartQueue.map((lead, i) => (
+                              <div key={lead.id} className="group bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-3 rounded-lg hover:border-brand-300 dark:hover:border-brand-700 transition-colors cursor-pointer relative">
+                                 <div className="absolute top-2 left-2 text-[10px] font-bold text-slate-300">#{i + 1}</div>
+                                 <div className="flex justify-between items-start mb-1">
+                                    <div className="font-medium text-slate-900 dark:text-white truncate max-w-[140px]">{lead.name}</div>
+                                    <Badge variant={lead.priorityReason === 'High AI Score' ? 'success' : 'neutral'} className="text-[10px] px-1.5 py-0">
+                                       {lead.priorityReason}
+                                    </Badge>
+                                 </div>
+                                 <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                                    <span>{lead.phone}</span>
+                                    <span>{lead.status}</span>
+                                 </div>
+                              </div>
+                           ))}
+                        </div>
+                     )}
+                  </div>
+               )}
+
+               {/* --- FOLLOW UP TAB --- */}
+               {leftSidebarTab === 'followup' && (
+                  <div className="space-y-3">
+                     {followUpTasks.length === 0 ? (
+                        <div className="text-center py-10 text-slate-400">
+                           <Clock className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                           <p>אין משימות פתוחות להיום</p>
+                           <p className="text-xs mt-1">המשימות יופיעו כאן כשתקבע פולואפ ללידים</p>
+                        </div>
+                     ) : (
+                        followUpTasks.map((task: any) => (
+                           <div
+                              key={task.id}
+                              className="bg-white border border-slate-200 rounded-lg p-3 hover:border-brand-300 transition-colors cursor-pointer"
+                              onClick={() => {
+                                 setActiveLeadId(task.lead_id);
+                              }}
+                           >
+                              <div className="flex justify-between items-start mb-1">
+                                 <span className="font-medium text-slate-900 truncate">{task.lead_name}</span>
+                                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${new Date(task.follow_up_at) < new Date()
+                                    ? 'bg-rose-100 text-rose-700'
+                                    : 'bg-blue-100 text-blue-700'
+                                    }`}>
+                                    {new Date(task.follow_up_at) < new Date() ? 'באיחור' : 'היום'}
+                                 </span>
+                              </div>
+                              <div className="flex items-center gap-2 text-xs text-slate-500">
+                                 <Clock className="w-3 h-3" />
+                                 <span>{new Date(task.follow_up_at).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}</span>
+                                 {task.notes && <span className="truncate">• {task.notes}</span>}
+                              </div>
+                           </div>
+                        ))
+                     )}
+                  </div>
+               )}
+
+            </div>
+
+            {/* Gamification Widget */}
+            <div className="p-4 border-b border-slate-200">
+               <GamificationWidget
+                  userId={currentUserId}
+                  orgId={orgId}
+                  compact={true}
+               />
+            </div>
+
             <div className="p-4 space-y-3">
                {isLoadingStats ? (
                   <div className="text-center text-slate-400 py-8">טוען מדדים...</div>

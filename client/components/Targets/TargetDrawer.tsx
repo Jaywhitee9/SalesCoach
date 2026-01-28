@@ -50,8 +50,11 @@ export const TargetDrawer: React.FC<TargetDrawerProps> = ({ targetData, user, on
             {/* Header */}
             <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-start bg-slate-50/50 dark:bg-slate-900/50">
                <div className="flex items-center gap-3">
-                  <img src={user.avatar} alt={user.name} className="w-12 h-12 rounded-full border border-slate-200 dark:border-slate-700" />
-                  <div>
+                  <img
+                     src={user.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=random`}
+                     alt=""
+                     className="w-12 h-12 rounded-full border-2 border-slate-200 dark:border-slate-700"
+                  /><div>
                      <h2 className="text-xl font-bold text-slate-900 dark:text-white leading-tight">יעדים של {user.name}</h2>
                      <p className="text-xs text-slate-500 mt-0.5">הגדרת מדדי ביצוע לתקופה הנוכחית</p>
                   </div>

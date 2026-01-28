@@ -495,6 +495,7 @@ export const TasksDashboard: React.FC<TasksDashboardProps> = ({ isDarkMode, curr
   const userType = currentUser?.type || 'manager';
   const isRep = userType === 'rep';
   const [selectedTeamMember, setSelectedTeamMember] = useState<string>('all');
+  const [isTeamFilterOpen, setIsTeamFilterOpen] = useState(false);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
 
   // Fetch Team Members (Manager Only)
@@ -503,11 +504,17 @@ export const TasksDashboard: React.FC<TasksDashboardProps> = ({ isDarkMode, curr
       if (isRep || !currentUser?.organization_id) return;
 
       const { data } = await supabase
-        .from('users')
-        .select('id, name, avatar')
+        .from('profiles')
+        .select('id, full_name, avatar_url')
         .eq('organization_id', currentUser.organization_id);
 
-      if (data) setTeamMembers(data);
+      if (data) {
+        setTeamMembers(data.map((u: any) => ({
+          id: u.id,
+          name: u.full_name,
+          avatar: u.avatar_url
+        })));
+      }
     };
     fetchTeam();
   }, [currentUser, isRep]);
@@ -573,19 +580,76 @@ export const TasksDashboard: React.FC<TasksDashboardProps> = ({ isDarkMode, curr
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Team Filter (Manager Only) */}
+          {/* Team Filter (Manager Only) - Premium Styled */}
           {!isRep && (
             <div className="relative">
-              <select
-                className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block w-full p-2.5"
-                value={selectedTeamMember}
-                onChange={(e) => setSelectedTeamMember(e.target.value)}
+              <button
+                onClick={() => setIsTeamFilterOpen(!isTeamFilterOpen)}
+                className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 text-sm rounded-xl px-4 py-2.5 hover:border-brand-400 transition-all shadow-sm"
               >
-                <option value="all">כל הצוות</option>
-                {teamMembers.map(member => (
-                  <option key={member.id} value={member.id}>{member.name}</option>
-                ))}
-              </select>
+                <Filter className="w-4 h-4 text-brand-600" />
+                <span className="font-medium">נציגים</span>
+                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isTeamFilterOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isTeamFilterOpen && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setIsTeamFilterOpen(false)}></div>
+                  <div className="absolute left-0 mt-2 w-52 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl z-40 py-2 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                    {/* All Team Option */}
+                    <button
+                      onClick={() => { setSelectedTeamMember('all'); setIsTeamFilterOpen(false); }}
+                      className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${selectedTeamMember === 'all'
+                        ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-400 font-semibold'
+                        : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                        }`}
+                    >
+                      {selectedTeamMember === 'all' && (
+                        <span className="w-2 h-2 rounded-full bg-brand-600"></span>
+                      )}
+                      <span className={selectedTeamMember !== 'all' ? 'mr-5' : ''}>כל הנציגים</span>
+                    </button>
+
+                    {/* Divider */}
+                    <div className="h-px bg-slate-100 dark:bg-slate-800 my-1"></div>
+
+                    {/* Team Members */}
+                    {teamMembers.map(member => (
+                      <button
+                        key={member.id}
+                        onClick={() => { setSelectedTeamMember(member.id); setIsTeamFilterOpen(false); }}
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors ${selectedTeamMember === member.id
+                          ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-700 dark:text-brand-400 font-semibold'
+                          : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300'
+                          }`}
+                      >
+                        {selectedTeamMember === member.id && (
+                          <span className="w-2 h-2 rounded-full bg-brand-600"></span>
+                        )}
+                        <img
+                          src={member.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name || 'U')}&background=random&size=24`}
+                          alt=""
+                          className="w-6 h-6 rounded-full object-cover"
+                        />
+                        <span className={selectedTeamMember !== member.id ? '' : ''}>{member.name}</span>
+                      </button>
+                    ))}
+
+                    {/* Reset Button */}
+                    {selectedTeamMember !== 'all' && (
+                      <>
+                        <div className="h-px bg-slate-100 dark:bg-slate-800 my-1"></div>
+                        <button
+                          onClick={() => { setSelectedTeamMember('all'); setIsTeamFilterOpen(false); }}
+                          className="w-full text-center px-4 py-2.5 text-sm text-brand-600 hover:text-brand-700 font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
+                        >
+                          איפוס
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
           )}
 

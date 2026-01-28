@@ -44,7 +44,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       for (let attempt = 1; attempt <= 3; attempt++) {
         const { data: fetchedProfile, error: profileErr } = await supabase
           .from("profiles")
-          .select("id, full_name, avatar_url, role")
+          .select("id, full_name, avatar_url, role, organization_id")
           .eq("id", user.id)
           .single();
 
@@ -65,12 +65,15 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           profile.role === "manager" ? "manager" :
             "rep";
 
+      console.log('[Login] User logged in with org:', profile.organization_id);
+
       onLogin({
         id: profile.id,
         name: profile.full_name || "User",
         role: profile.role,
         avatar: profile.avatar_url,
-        type: mappedType
+        type: mappedType,
+        organization_id: profile.organization_id
       });
 
     } catch (err) {

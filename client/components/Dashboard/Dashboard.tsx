@@ -35,9 +35,10 @@ interface DashboardProps {
   isDarkMode: boolean;
   onNavigate?: (page: string) => void;
   userName?: string;
+  centerType?: 'sales' | 'support';
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ onStartCall, isDarkMode, onNavigate, userName }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ onStartCall, isDarkMode, onNavigate, userName, centerType = 'sales' }) => {
   // Helper for greeting based on Israel time
   const getGreeting = () => {
     const hour = new Date().getHours(); // Uses client's local time (assuming user is in context)
@@ -391,7 +392,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartCall, isDarkMode, o
             <h1 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
               {greeting}, {userName || 'שרה'} ☀️
             </h1>
-            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">מוכנה לכבוש את היעדים של היום?</p>
+            <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">זמן לכבוש את היעדים של היום!</p>
           </div>
 
           {/* Quality Score Badge */}
@@ -531,7 +532,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartCall, isDarkMode, o
               <thead className="bg-slate-50/80 dark:bg-slate-800/50 text-[11px] text-slate-500 uppercase tracking-wider border-b border-slate-100 dark:border-slate-800 sticky top-0 z-10 backdrop-blur-sm">
                 <tr>
                   <th className="px-6 py-3 font-semibold w-24">שעה</th>
-                  <th className="px-6 py-3 font-semibold">ליד</th>
+                  <th className="px-6 py-3 font-semibold">{centerType === 'support' ? 'פנייה / לקוח' : 'ליד'}</th>
                   <th className="px-6 py-3 font-semibold">סוג / תוצאה</th>
                   <th className="px-6 py-3 font-semibold">סטטוס</th>
                   <th className="px-6 py-3 font-semibold w-24">פעולה</th>
@@ -829,7 +830,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartCall, isDarkMode, o
               </div>
             </div>
           ) : weeklyData.length > 0 ? (
-            <div className="flex-1 min-h-[200px]">
+            <div style={{ width: '100%', height: 260 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={weeklyData} barGap={8} barCategoryGap="20%">
                   <XAxis

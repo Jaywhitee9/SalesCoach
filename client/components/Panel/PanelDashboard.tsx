@@ -104,7 +104,8 @@ export const PanelDashboard: React.FC<PanelDashboardProps> = ({ isDarkMode, onSt
         };
 
         fetchPanelData();
-    }, [period, currentUser?.id]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [period, currentUser?.id, currentUser?.organization_id]);
 
     // KPI Card Component
     const KPICard = ({
@@ -443,7 +444,7 @@ export const PanelDashboard: React.FC<PanelDashboardProps> = ({ isDarkMode, onSt
 
                         {/* Chart */}
                         <div className="h-48">
-                            <ResponsiveContainer width="100%" height="100%">
+                            <ResponsiveContainer width="100%" height="100%" minWidth={1}>
                                 <BarChart data={chartData} layout="vertical">
                                     <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#334155' : '#e2e8f0'} />
                                     <XAxis type="number" tick={{ fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 10 }} />

@@ -308,23 +308,39 @@ export const InsightsPanel: React.FC<InsightsPanelProps> = ({ insights, coaching
                         {/* BRIDGES */}
                         {section.id === 'bridges' && (
                           <>
-                            <div className="space-y-3">
-                              <div className="flex flex-col gap-1.5">
-                                <p className="text-xs text-slate-800 dark:text-slate-200 font-medium leading-relaxed">מודול סנכרון אוטומטי דו-כיווני</p>
-                                <div className="flex items-center gap-1.5">
-                                  <Smile className="w-3 h-3 text-emerald-500" />
-                                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">תגובה חיובית</span>
-                                </div>
+                            {(coachingData?.signals?.bridges && coachingData.signals.bridges.length > 0) ? (
+                              <div className="space-y-3">
+                                {coachingData.signals.bridges.map((item: any, i: number) => {
+                                  // Determine response icon based on sentiment
+                                  const sentiment = item.sentiment || 'neutral';
+                                  const SentimentIcon = sentiment === 'positive' ? Smile :
+                                    sentiment === 'skeptical' ? Meh : Minus;
+                                  const sentimentColor = sentiment === 'positive' ? 'text-emerald-500' :
+                                    sentiment === 'skeptical' ? 'text-amber-500' : 'text-slate-400';
+                                  const sentimentLabel = sentiment === 'positive' ? 'תגובה חיובית' :
+                                    sentiment === 'skeptical' ? 'ספקנות קלה' : 'נייטרלי';
+                                  const labelColor = sentiment === 'positive' ? 'text-emerald-600 dark:text-emerald-400' :
+                                    sentiment === 'skeptical' ? 'text-amber-600 dark:text-amber-400' : 'text-slate-500';
+
+                                  return (
+                                    <div key={i} className="flex flex-col gap-1.5">
+                                      <p className="text-xs text-slate-800 dark:text-slate-200 font-medium leading-relaxed">
+                                        {item.text}
+                                      </p>
+                                      <div className="flex items-center gap-1.5">
+                                        <SentimentIcon className={`w-3 h-3 ${sentimentColor}`} />
+                                        <span className={`text-[10px] font-bold ${labelColor}`}>{sentimentLabel}</span>
+                                      </div>
+                                      {i < (coachingData?.signals?.bridges?.length || 0) - 1 && (
+                                        <div className="h-px bg-slate-100 dark:bg-slate-800 mt-1"></div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
                               </div>
-                              <div className="h-px bg-slate-100 dark:bg-slate-800"></div>
-                              <div className="flex flex-col gap-1.5">
-                                <p className="text-xs text-slate-800 dark:text-slate-200 font-medium leading-relaxed">אפליקציית נייטיב לאנדרואיד/iOS</p>
-                                <div className="flex items-center gap-1.5">
-                                  <Meh className="w-3 h-3 text-amber-500" />
-                                  <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold">ספקנות קלה</span>
-                                </div>
-                              </div>
-                            </div>
+                            ) : (
+                              <p className="text-xs text-slate-400 italic">לא זוהו גשרים / פתרונות עדיין...</p>
+                            )}
                           </>
                         )}
 
@@ -335,8 +351,8 @@ export const InsightsPanel: React.FC<InsightsPanelProps> = ({ insights, coaching
                               <div className="space-y-3">
                                 {coachingData.signals.objections.map((item, i) => (
                                   <div key={i} className={`p-2.5 rounded-lg border ${item.status === 'handled'
-                                      ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/30 opacity-75'
-                                      : 'bg-rose-50 dark:bg-rose-900/10 border-rose-100 dark:border-rose-900/30'
+                                    ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-900/30 opacity-75'
+                                    : 'bg-rose-50 dark:bg-rose-900/10 border-rose-100 dark:border-rose-900/30'
                                     }`}>
                                     <div className="flex justify-between items-start mb-1.5">
                                       <div className="flex items-center gap-1.5">
@@ -350,8 +366,8 @@ export const InsightsPanel: React.FC<InsightsPanelProps> = ({ insights, coaching
                                         </span>
                                       </div>
                                       <span className={`text-[9px] border px-1.5 rounded-sm bg-white dark:bg-slate-900 ${item.status === 'handled'
-                                          ? 'border-emerald-200 text-emerald-600'
-                                          : 'border-rose-200 text-rose-600'
+                                        ? 'border-emerald-200 text-emerald-600'
+                                        : 'border-rose-200 text-rose-600'
                                         }`}>
                                         {item.status === 'handled' ? 'טופלה' : 'פתוחה'}
                                       </span>

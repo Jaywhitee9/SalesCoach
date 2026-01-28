@@ -10,7 +10,8 @@ import {
   ThumbsDown,
   Loader2,
   Save,
-  MessageSquare
+  MessageSquare,
+  Zap
 } from 'lucide-react';
 import { Button } from '../Common/Button';
 import { DateTimePicker } from '../Common/DateTimePicker';
@@ -36,7 +37,10 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
     dismissSummaryModal,
     summaryStatus,
     callSummary,
-    callSessionId
+    callSessionId,
+    // Power Flow
+    smartQueue,
+    dialNextLead
   } = useCall();
 
   const [activeTab, setActiveTab] = useState<'summary' | 'transcript'>('summary');
@@ -147,6 +151,42 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
 
     setIsSaving(false);
     dismissSummaryModal();
+  };
+
+  // Power Flow: Save outcome AND immediately dial next lead
+  const handleSaveAndNext = async () => {
+    if (!outcome) return;
+
+    setIsSaving(true);
+    console.log('[Summary] Saving outcome and dialing next:', outcome);
+
+    try {
+      // Save to backend API
+      const response = await fetch(`/api/leads/${leadId}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          status: outcome,
+          followUpAt: followUpDate ? followUpDate.toISOString() : null,
+          notes: outcome === 'not_relevant' ? notRelevantReason : (followUpNotes || null),
+          callSessionId,
+          summaryJson: callSummary
+        })
+      });
+
+      if (!response.ok) {
+        console.error('[Summary] Failed to save:', await response.text());
+      } else {
+        console.log('[Activity] inserted:', { type: outcome, leadId });
+      }
+    } catch (err) {
+      console.error('[Summary] Save error:', err);
+    }
+
+    setIsSaving(false);
+
+    // Trigger next call via context
+    await dialNextLead();
   };
 
   return (
@@ -356,25 +396,46 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex justify-between items-center">
+        <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 flex justify-between items-center gap-3">
           <button
             onClick={dismissSummaryModal}
             className="text-sm text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 font-medium px-4"
           >
             דלג וסגור
           </button>
-          <Button
-            onClick={handleSave}
-            disabled={!outcome || isSaving}
-            className="px-6 shadow-lg shadow-brand-500/20"
-          >
-            {isSaving ? (
-              <Loader2 className="w-4 h-4 ml-2 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4 ml-2" />
+
+          <div className="flex gap-2">
+            {/* Regular Save */}
+            <Button
+              onClick={handleSave}
+              disabled={!outcome || isSaving}
+              variant="secondary"
+              className="px-4"
+            >
+              {isSaving ? (
+                <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4 ml-2" />
+              )}
+              שמור
+            </Button>
+
+            {/* Power Flow: Save & Next (only if queue has items) */}
+            {smartQueue.length > 0 && (
+              <Button
+                onClick={handleSaveAndNext}
+                disabled={!outcome || isSaving}
+                className="px-6 shadow-lg shadow-brand-500/20 bg-gradient-to-r from-brand-600 to-purple-600 hover:from-brand-700 hover:to-purple-700"
+              >
+                {isSaving ? (
+                  <Loader2 className="w-4 h-4 ml-2 animate-spin" />
+                ) : (
+                  <Zap className="w-4 h-4 ml-2 fill-current" />
+                )}
+                שמור והמשך ⚡
+              </Button>
             )}
-            שמור וסיים
-          </Button>
+          </div>
         </div>
 
       </div>

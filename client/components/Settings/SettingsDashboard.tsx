@@ -31,20 +31,33 @@ import {
   LogOut,
   Clock,
   Target,
-  Key
+  Key,
+  BookOpen
 } from 'lucide-react';
+import { supabase } from '../../src/lib/supabaseClient';
 import { CampaignSettings } from './CampaignSettings';
+import { SettingsCalls } from './SettingsCalls';
 import { WebhookSettings } from './WebhookSettings';
+import { KnowledgeBase } from './KnowledgeBase';
 import { Button } from '../Common/Button';
 import { Badge } from '../Common/Badge';
 import { SYSTEM_HEALTH_DATA } from '../../constants';
-import { User as UserType } from '../../types';
+import { User as UserType, ServiceStatus } from '../../types';
 
 interface SettingsDashboardProps {
   isDarkMode: boolean;
   user: UserType;
   onLogout: () => void;
   toggleTheme: () => void;
+}
+
+interface TeamMember {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  last_sign_in_at?: string;
+  avatar_url?: string;
 }
 
 // --- SUB-COMPONENTS ---
@@ -216,13 +229,13 @@ const SettingsProfile = ({ user, isDarkMode, toggleTheme }: { user: UserType; is
 };
 
 // 2. Team & Roles
-const SettingsTeam = () => {
+const SettingsTeam = ({ members }: { members: TeamMember[] }) => {
   const [activeTab, setActiveTab] = useState<'users' | 'roles'>('users');
 
-  const users = [
-    { id: 1, name: 'שרה כהן', email: 'sara@company.com', role: 'נציג מכירות', team: 'Team Alpha', status: 'active', lastLogin: 'לפני שעה' },
-    { id: 2, name: 'דוד לוי', email: 'david@company.com', role: 'מנהל מכירות', team: 'Management', status: 'active', lastLogin: 'אתמול' },
-    { id: 3, name: 'רונית גל', email: 'ronit@company.com', role: 'נציג מכירות', team: 'Team Alpha', status: 'pending', lastLogin: '-' },
+  // Use real members if available, otherwise mock
+  const displayMembers = members.length > 0 ? members : [
+    { id: '1', name: 'שרה כהן', email: 'sara@company.com', role: 'rep', team: 'צוות אלפא', status: 'active', lastLogin: 'לפני שעה' },
+    { id: '2', name: 'דוד לוי', email: 'david@company.com', role: 'manager', team: 'הנהלה', status: 'active', lastLogin: 'אתמול' },
   ];
 
   return (
@@ -231,7 +244,7 @@ const SettingsTeam = () => {
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm flex items-center justify-between">
           <div>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white">12</p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white">{members.length || 12}</p>
             <p className="text-xs text-slate-500">משתמשים פעילים</p>
           </div>
           <Users className="w-8 h-8 text-brand-100 dark:text-brand-900/50" />
@@ -294,7 +307,7 @@ const SettingsTeam = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {users.map(u => (
+              {displayMembers.map((u: any) => (
                 <tr key={u.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors cursor-pointer group">
                   <td className="px-6 py-3 font-medium text-slate-900 dark:text-white">{u.name}</td>
                   <td className="px-6 py-3 text-slate-500">{u.email}</td>
@@ -306,10 +319,10 @@ const SettingsTeam = () => {
                   <td className="px-6 py-3 text-slate-500">{u.team}</td>
                   <td className="px-6 py-3">
                     <Badge variant={u.status === 'active' ? 'success' : 'warning'}>
-                      {u.status === 'active' ? 'פעיל' : 'ממתין'}
+                      {u.status === 'active' || !u.status ? 'פעיל' : 'ממתין'}
                     </Badge>
                   </td>
-                  <td className="px-6 py-3 text-slate-500 font-mono text-xs">{u.lastLogin}</td>
+                  <td className="px-6 py-3 text-slate-500 font-mono text-xs">{u.last_sign_in_at ? new Date(u.last_sign_in_at).toLocaleDateString('he-IL') : (u.lastLogin || '-')}</td>
                   <td className="px-6 py-3 text-left">
                     <button className="text-slate-400 hover:text-brand-600 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors opacity-0 group-hover:opacity-100">
                       <MoreVertical className="w-4 h-4" />
@@ -352,114 +365,7 @@ const SettingsTeam = () => {
   );
 };
 
-// 3. Calls & Coaching
-const SettingsCalls = () => (
-  <div className="space-y-6 animate-in fade-in duration-300">
-    {/* Live Call Settings */}
-    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-      <h3 className="text-base font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
-        <Activity className="w-5 h-5 text-brand-500" /> מצב שיחות חי
-      </h3>
-      <div className="space-y-4">
-        <div className="flex items-center justify-between py-2">
-          <div>
-            <span className="text-sm font-medium text-slate-900 dark:text-white block">תמלול שיחות בזמן אמת</span>
-            <span className="text-xs text-slate-500">הצגת טקסט השיחה על המסך בזמן אמת</span>
-          </div>
-          <div className="w-10 h-5 bg-brand-600 rounded-full relative cursor-pointer">
-            <div className="absolute right-1 top-1 w-3 h-3 bg-white rounded-full shadow-sm"></div>
-          </div>
-        </div>
-        <div className="flex items-center justify-between py-2">
-          <div>
-            <span className="text-sm font-medium text-slate-900 dark:text-white block">הצגת תובנות AI בזמן שיחה</span>
-            <span className="text-xs text-slate-500">הצגת טיפים, התנגדויות ונקודות מפתח בזמן אמת</span>
-          </div>
-          <div className="w-10 h-5 bg-brand-600 rounded-full relative cursor-pointer">
-            <div className="absolute right-1 top-1 w-3 h-3 bg-white rounded-full shadow-sm"></div>
-          </div>
-        </div>
-        <div className="pt-2">
-          <label className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">שפת שיחה ברירת מחדל</label>
-          <select className="w-full md:w-64 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm outline-none">
-            <option>זיהוי אוטומטי (Auto-detect)</option>
-            <option>עברית (Hebrew)</option>
-            <option>אנגלית (English)</option>
-          </select>
-        </div>
-      </div>
-    </div>
 
-    {/* AI Coach Settings */}
-    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-      <h3 className="text-base font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
-        <Sliders className="w-5 h-5 text-purple-500" /> הגדרות אימון (AI Coach)
-      </h3>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
-        <div>
-          <label className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-2 block">מודל AI</label>
-          <select className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm outline-none mb-4">
-            <option>מודל ברירת מחדל (Standard v2)</option>
-            <option>מודל מכירות מתקדם (Sales Pro)</option>
-          </select>
-
-          <div className="flex items-center justify-between py-2 border-t border-slate-100 dark:border-slate-800">
-            <div>
-              <span className="text-sm font-medium text-slate-900 dark:text-white block">הפעלת טיפים קצרים בלבד</span>
-              <span className="text-xs text-slate-500">הסתרת הסברים ארוכים לטובת קריאות מהירה</span>
-            </div>
-            <div className="w-10 h-5 bg-slate-300 dark:bg-slate-700 rounded-full relative cursor-pointer">
-              <div className="absolute left-1 top-1 w-3 h-3 bg-white rounded-full shadow-sm"></div>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4 bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg">
-          <h4 className="text-xs font-bold text-slate-500 uppercase">מיקוד האימון (משקולות)</h4>
-
-          {[
-            { label: 'דגש על גילוי צרכים', val: 70 },
-            { label: 'דגש על טיפול בהתנגדויות', val: 50 },
-            { label: 'דגש על סגירה', val: 85 }
-          ].map((item, idx) => (
-            <div key={idx}>
-              <div className="flex justify-between mb-1">
-                <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{item.label}</span>
-                <span className="text-xs font-bold text-brand-600">{item.val}%</span>
-              </div>
-              <input type="range" min="0" max="100" defaultValue={item.val} className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer accent-brand-600" />
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-
-    {/* Call Stages (Drag & Drop Simulation) */}
-    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
-      <div className="flex justify-between items-center mb-6">
-        <h3 className="text-base font-bold text-slate-900 dark:text-white">שלבי שיחת מכירה</h3>
-        <Button size="sm" variant="ghost" className="text-xs border border-dashed border-slate-300"><Plus className="w-3 h-3 ml-1" /> הוסף שלב</Button>
-      </div>
-
-      <div className="space-y-2">
-        {['פתיחה והיכרות', 'גילוי צרכים והבנת כאב', 'הצגת חזון ופתרון', 'טיפול בהתנגדויות', 'הצעת מחיר וסגירה'].map((stage, i) => (
-          <div key={i} className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-lg group hover:border-brand-200 transition-colors">
-            <GripVertical className="w-4 h-4 text-slate-300 cursor-move" />
-            <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-bold text-slate-500">
-              {i + 1}
-            </div>
-            <input type="text" defaultValue={stage} className="flex-1 bg-transparent text-sm text-slate-700 dark:text-slate-200 font-medium outline-none border-b border-transparent focus:border-brand-500 transition-colors" />
-            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <button className="p-1.5 text-slate-400 hover:text-slate-600"><Edit2 className="w-3.5 h-3.5" /></button>
-              <button className="p-1.5 text-slate-400 hover:text-rose-500"><Trash2 className="w-3.5 h-3.5" /></button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  </div>
-);
 
 // 4. Integrations
 const SettingsIntegrations = () => {
@@ -681,7 +587,7 @@ const SettingsSecurity = () => (
 );
 
 // 7. Billing
-const SettingsBilling = () => (
+const SettingsBilling = ({ usage }: { usage: { users: number, minutes: number } }) => (
   <div className="space-y-6 animate-in fade-in duration-300">
     {/* Current Plan */}
     <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-xl shadow-lg p-6 text-white relative overflow-hidden">
@@ -717,7 +623,7 @@ const SettingsBilling = () => (
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
         <p className="text-xs text-slate-500 mb-1">משתמשים (Seats)</p>
         <div className="flex justify-between items-end mb-2">
-          <span className="text-2xl font-bold text-slate-900 dark:text-white">12</span>
+          <span className="text-2xl font-bold text-slate-900 dark:text-white">{usage.users}</span>
           <span className="text-xs font-medium text-slate-400">מתוך 20</span>
         </div>
         <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -727,7 +633,7 @@ const SettingsBilling = () => (
       <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 shadow-sm">
         <p className="text-xs text-slate-500 mb-1">דקות שיחה ואימון</p>
         <div className="flex justify-between items-end mb-2">
-          <span className="text-2xl font-bold text-slate-900 dark:text-white">840</span>
+          <span className="text-2xl font-bold text-slate-900 dark:text-white">{Math.round(usage.minutes)}</span>
           <span className="text-xs font-medium text-slate-400">מתוך 2,000</span>
         </div>
         <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
@@ -791,7 +697,39 @@ const SettingsBilling = () => (
 );
 
 // 8. Overview (Modified)
-const SettingsOverview = ({ setCategory }: { setCategory: (id: string) => void }) => {
+const SettingsOverview = ({ setCategory, stats }: {
+  setCategory: (id: string) => void,
+  stats: {
+    users: number,
+    activeIntegrations: number,
+    leads: number,
+    campaigns: number,
+    knowledge: number
+  }
+}) => {
+  // Initialize with MOCK data so it is never empty on load
+  const [healthData, setHealthData] = useState<ServiceStatus[]>(SYSTEM_HEALTH_DATA);
+  const [loadingHealth, setLoadingHealth] = useState(false); // No loading state needed since we have mocks
+
+  React.useEffect(() => {
+    // Attempt to fetch real data
+    const fetchHealth = async () => {
+      try {
+        const res = await fetch('/api/system/health');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.health) && data.health.length > 0) {
+            setHealthData(data.health); // Overwrite with real data if available
+          }
+        }
+      } catch (err) {
+        console.warn('System Health Check Failed - Using cached data:', err);
+      }
+    };
+
+    fetchHealth();
+  }, []);
+
   return (
     <div className="space-y-8 animate-in fade-in duration-300">
 
@@ -808,7 +746,7 @@ const SettingsOverview = ({ setCategory }: { setCategory: (id: string) => void }
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {SYSTEM_HEALTH_DATA.map((service) => (
+          {healthData.map((service) => (
             <div key={service.id} className="flex flex-col gap-2 p-3 rounded-lg border border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-800/20">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-700 dark:text-slate-300 truncate pr-2">{service.name}</span>
@@ -854,7 +792,7 @@ const SettingsOverview = ({ setCategory }: { setCategory: (id: string) => void }
           </div>
           <div className="flex justify-between items-start mb-2">
             <h3 className="text-base font-bold text-slate-900 dark:text-white">צוות ותפקידים</h3>
-            <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-full">12 פעילים</span>
+            <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-full">{stats.users} פעילים</span>
           </div>
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed h-10">
             הוסף משתמשים, נהל הרשאות וצור צוותי מכירות חדשים.
@@ -874,13 +812,41 @@ const SettingsOverview = ({ setCategory }: { setCategory: (id: string) => void }
           <span className="text-xs font-bold text-brand-600 dark:text-brand-400 flex items-center">הגדרות שיחה <ChevronLeft className="w-3 h-3 mr-1" /></span>
         </div>
 
+        <div onClick={() => setCategory('knowledge')} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 hover:shadow-md transition-all cursor-pointer group hover:border-brand-200 dark:hover:border-brand-800">
+          <div className="w-10 h-10 rounded-lg bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center text-orange-600 dark:text-orange-400 mb-4 group-hover:scale-110 transition-transform duration-300">
+            <BookOpen className="w-5 h-5" />
+          </div>
+          <div className="flex justify-between items-start mb-2">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">בסיס ידע</h3>
+            <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-full">{stats.knowledge} פריטים</span>
+          </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed h-10">
+            נהל את המידע העסקי, התחבר למסמכים וצור מאגר ידע חכם.
+          </p>
+          <span className="text-xs font-bold text-brand-600 dark:text-brand-400 flex items-center">נהל ידע <ChevronLeft className="w-3 h-3 mr-1" /></span>
+        </div>
+
+        <div onClick={() => setCategory('campaigns')} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 hover:shadow-md transition-all cursor-pointer group hover:border-brand-200 dark:hover:border-brand-800">
+          <div className="w-10 h-10 rounded-lg bg-pink-50 dark:bg-pink-900/20 flex items-center justify-center text-pink-600 dark:text-pink-400 mb-4 group-hover:scale-110 transition-transform duration-300">
+            <Target className="w-5 h-5" />
+          </div>
+          <div className="flex justify-between items-start mb-2">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">קמפיינים</h3>
+            <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-full">{stats.campaigns} פעילים</span>
+          </div>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed h-10">
+            צור מקורות לידים, הגדר דפי נחיתה ונהל קמפיינים שונים.
+          </p>
+          <span className="text-xs font-bold text-brand-600 dark:text-brand-400 flex items-center">נהל קמפיינים <ChevronLeft className="w-3 h-3 mr-1" /></span>
+        </div>
+
         <div onClick={() => setCategory('integrations')} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 hover:shadow-md transition-all cursor-pointer group hover:border-brand-200 dark:hover:border-brand-800">
           <div className="w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center text-purple-600 dark:text-purple-400 mb-4 group-hover:scale-110 transition-transform duration-300">
             <Plug className="w-5 h-5" />
           </div>
           <h3 className="text-base font-bold text-slate-900 dark:text-white mb-2">אינטגרציות</h3>
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed h-10">
-            מחובר ל-Salesforce, Zoom ו-Slack. נהל מפתחות API.
+            {stats.activeIntegrations} אינטגרציות מחוברות. נהל מפתחות API ו-Webhooks.
           </p>
           <span className="text-xs font-bold text-brand-600 dark:text-brand-400 flex items-center">נהל חיבורים <ChevronLeft className="w-3 h-3 mr-1" /></span>
         </div>
@@ -911,7 +877,10 @@ const SettingsOverview = ({ setCategory }: { setCategory: (id: string) => void }
           <div className="w-10 h-10 rounded-lg bg-teal-50 dark:bg-teal-900/20 flex items-center justify-center text-teal-600 dark:text-teal-400 mb-4 group-hover:scale-110 transition-transform duration-300">
             <CreditCard className="w-5 h-5" />
           </div>
-          <h3 className="text-base font-bold text-slate-900 dark:text-white mb-2">תשלומים</h3>
+          <div className="flex justify-between items-start mb-2">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">תשלומים ומנוי</h3>
+            <span className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded-full">{stats.leads} לידים</span>
+          </div>
           <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed h-10">
             צפייה בחשבוניות, ניהול מנוי ועדכון אמצעי תשלום.
           </p>
@@ -933,6 +902,7 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ isDarkMode
     { id: 'team', label: 'צוות ותפקידים', icon: Users },
     { id: 'calls', label: 'שיחות ואימון', icon: Phone },
     { id: 'campaigns', label: 'קמפיינים', icon: Target },
+    { id: 'knowledge', label: 'בסיס ידע', icon: BookOpen },
     { id: 'webhooks', label: 'Webhooks', icon: Key },
     { id: 'integrations', label: 'אינטגרציות', icon: Plug },
     { id: 'notifications', label: 'התראות', icon: Bell },
@@ -952,17 +922,18 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ isDarkMode
   // Map category IDs to components and header info
   const renderContent = () => {
     switch (activeCategory) {
-      case 'overview': return <SettingsOverview setCategory={setActiveCategory} />;
+      case 'overview': return <SettingsOverview setCategory={setActiveCategory} stats={stats} />;
       case 'profile': return <SettingsProfile user={user} isDarkMode={isDarkMode} toggleTheme={toggleTheme} />;
-      case 'team': return <SettingsTeam />;
-      case 'calls': return <SettingsCalls />;
+      case 'team': return <SettingsTeam members={teamMembers} />;
+      case 'calls': return <SettingsCalls user={user} />;
       case 'campaigns': return <CampaignSettings />;
+      case 'knowledge': return <KnowledgeBase user={user} />;
       case 'webhooks': return <WebhookSettings />;
       case 'integrations': return <SettingsIntegrations />;
       case 'notifications': return <SettingsNotifications />;
       case 'security': return <SettingsSecurity />;
-      case 'billing': return <SettingsBilling />;
-      default: return <SettingsOverview setCategory={setActiveCategory} />;
+      case 'billing': return <SettingsBilling usage={{ users: stats.users, minutes: callMinutes }} />;
+      default: return <SettingsOverview setCategory={setActiveCategory} stats={stats} />;
     }
   };
 
@@ -973,6 +944,7 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ isDarkMode
       case 'team': return { title: 'צוות ותפקידים', desc: 'נהל את המשתמשים, הצוותים והרשאות הגישה במערכת.' };
       case 'calls': return { title: 'שיחות ואימון', desc: 'הגדר כיצד המערכת מתמללת, מנתחת ומאמנת את הנציגים בזמן אמת.' };
       case 'campaigns': return { title: 'קמפיינים', desc: 'נהל קמפיינים וסנן לידים לפי מקור (דף נחיתה, גוגל, ועוד).' };
+      case 'knowledge': return { title: 'בסיס ידע', desc: 'הגדר מידע ייחודי לעסק שלך - המאמן ישתמש בזה לאימון חכם ומותאם אישית.' };
       case 'webhooks': return { title: 'Webhooks & API', desc: 'קבל לידים מפייסבוק, דפי נחיתה, גוגל ומקורות חיצוניים.' };
       case 'integrations': return { title: 'אינטגרציות', desc: 'חבר את המערכת לכלים החיצוניים שלך (CRM, טלפוניה ועוד).' };
       case 'notifications': return { title: 'התראות', desc: 'בחר על מה לקבל עדכונים ובאילו ערוצים.' };
@@ -983,6 +955,78 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ isDarkMode
   };
 
   const headerInfo = getHeaderInfo();
+
+  // Fetch Real Data
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [callMinutes, setCallMinutes] = useState(0);
+  const [leadCount, setLeadCount] = useState(0);
+  const [campaignCount, setCampaignCount] = useState(0);
+  const [knowledgeCount, setKnowledgeCount] = useState(0);
+
+  React.useEffect(() => {
+    const fetchData = async () => {
+      // 1. Fetch Users
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, full_name, email, role, avatar_url');
+
+      if (profiles) {
+        setTeamMembers(profiles.map(p => ({
+          id: p.id,
+          name: p.full_name || 'User',
+          email: p.email || '',
+          role: p.role || 'rep',
+          avatar_url: p.avatar_url
+        })));
+      }
+
+      // 2. Fetch Call Stats
+      if (user.role === 'manager') {
+        const { data: calls } = await supabase
+          .from('calls')
+          .select('duration');
+
+        if (calls) {
+          const totalSeconds = calls.reduce((acc, call) => acc + (call.duration || 0), 0);
+          setCallMinutes(totalSeconds / 60);
+        }
+
+        // 3. Fetch Lead Count
+        const { count: leads } = await supabase
+          .from('leads')
+          .select('*', { count: 'exact', head: true });
+        setLeadCount(leads || 0);
+
+        // 4. Fetch Campaign Count
+        const { count: campaigns } = await supabase
+          .from('campaigns')
+          .select('*', { count: 'exact', head: true });
+        setCampaignCount(campaigns || 0);
+
+        // 5. Fetch Knowledge Base Count
+        const { count: knowledge } = await supabase
+          .from('organization_knowledge')
+          .select('*', { count: 'exact', head: true });
+        setKnowledgeCount(knowledge || 0);
+      } else {
+        // For reps, just fetch their own leads
+        const { count: leads } = await supabase
+          .from('leads')
+          .select('*', { count: 'exact', head: true });
+        setLeadCount(leads || 0);
+      }
+    };
+
+    fetchData();
+  }, [user.role]);
+
+  const stats = {
+    users: teamMembers.length || 1,
+    activeIntegrations: 4, // Still mocked for now
+    leads: leadCount,
+    campaigns: campaignCount,
+    knowledge: knowledgeCount
+  };
 
   return (
     <div className="flex flex-1 h-full bg-slate-50 dark:bg-slate-950 overflow-hidden">

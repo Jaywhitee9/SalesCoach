@@ -35,7 +35,7 @@ import { InviteUserModal } from '../Admin/InviteUserModal';
 
 interface SuperAdminDashboardProps {
    onLogout: () => void;
-   onImpersonate: (orgId: string, orgName: string) => void;
+   onImpersonate: (orgId: string, orgName: string, centerType?: 'sales' | 'support') => void;
 }
 
 interface Organization {
@@ -45,6 +45,7 @@ interface Organization {
    user_count: number;
    lead_count: number;
    plan?: string;
+   center_type?: 'sales' | 'support';
 }
 
 interface OrgUser {
@@ -89,6 +90,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onLogo
    // Modal Form State
    const [newOrgName, setNewOrgName] = useState('');
    const [newOrgPlan, setNewOrgPlan] = useState('free');
+   const [newCenterType, setNewCenterType] = useState<'sales' | 'support'>('sales');
    const [deleteConfirmation, setDeleteConfirmation] = useState('');
    const [showEditPlanModal, setShowEditPlanModal] = useState<Organization | null>(null);
    const [selectedPlan, setSelectedPlan] = useState('free');
@@ -161,7 +163,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onLogo
          const res = await fetch('/api/admin/organizations', {
             method: 'POST',
             headers,
-            body: JSON.stringify({ name: newOrgName.trim(), plan: newOrgPlan })
+            body: JSON.stringify({ name: newOrgName.trim(), plan: newOrgPlan, center_type: newCenterType })
          });
          const data = await res.json();
 
@@ -496,6 +498,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onLogo
                               <th className="px-6 py-4 cursor-pointer hover:text-indigo-600 text-right" onClick={() => handleSort('name')}>
                                  <div className="flex items-center gap-1">שם הארגון <SortIcon field="name" /></div>
                               </th>
+                              <th className="px-6 py-4 text-center">סוג</th>
                               <th className="px-6 py-4 text-center">תוכנית</th>
                               <th className="px-6 py-4 cursor-pointer hover:text-indigo-600 text-center" onClick={() => handleSort('user_count')}>
                                  <div className="flex items-center justify-center gap-1">משתמשים <SortIcon field="user_count" /></div>
@@ -524,6 +527,11 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onLogo
                                     </div>
                                  </td>
                                  <td className="px-6 py-4 text-center">
+                                    <Badge variant={org.center_type === 'support' ? 'purple' : 'neutral'}>
+                                       {org.center_type === 'support' ? 'שירות' : 'מכירות'}
+                                    </Badge>
+                                 </td>
+                                 <td className="px-6 py-4 text-center">
                                     <Badge variant={org.plan === 'enterprise' ? 'brand' : org.plan === 'pro' ? 'success' : 'secondary'}>
                                        {org.plan?.toUpperCase() || 'FREE'}
                                     </Badge>
@@ -547,7 +555,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onLogo
                                           <Eye className="w-4 h-4" />
                                        </button>
                                        <button
-                                          onClick={() => onImpersonate(org.id, org.name)}
+                                          onClick={() => onImpersonate(org.id, org.name, org.center_type)}
                                           className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 rounded-lg transition-colors"
                                           title="התחבר כארגון"
                                        >
@@ -626,6 +634,29 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onLogo
                                  {plan.charAt(0).toUpperCase() + plan.slice(1)}
                               </button>
                            ))}
+                        </div>
+                     </div>
+                     <div className="mb-6">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 block">סוג מוקד</label>
+                        <div className="grid grid-cols-2 gap-2">
+                           <button
+                              onClick={() => setNewCenterType('sales')}
+                              className={`py-3 px-4 text-sm rounded-lg border transition-all flex items-center justify-center gap-2 ${newCenterType === 'sales'
+                                 ? 'bg-indigo-600 text-white border-indigo-600'
+                                 : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
+                                 }`}
+                           >
+                              📞 מוקד מכירות
+                           </button>
+                           <button
+                              onClick={() => setNewCenterType('support')}
+                              className={`py-3 px-4 text-sm rounded-lg border transition-all flex items-center justify-center gap-2 ${newCenterType === 'support'
+                                 ? 'bg-emerald-600 text-white border-emerald-600'
+                                 : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-emerald-300'
+                                 }`}
+                           >
+                              🎧 מוקד שירות
+                           </button>
                         </div>
                      </div>
                      <div className="flex gap-3">

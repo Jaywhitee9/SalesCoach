@@ -206,7 +206,7 @@ export const useLeads = (initialStatus?: string, organizationId?: string) => {
 
     useEffect(() => {
         fetchLeads();
-    }, []);
+    }, [organizationId]);
 
     // AI Score Generation
     const generateAiScore = async (leadId: string) => {

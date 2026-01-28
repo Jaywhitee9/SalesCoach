@@ -9,6 +9,53 @@ const { v4: uuidv4 } = require('uuid');
 async function leadsHandler(fastify, options) {
 
     // ========================================
+    // GET /api/leads/smart-queue
+    // Get prioritized calling queue
+    // ========================================
+    fastify.get('/api/leads/smart-queue', async (request, reply) => {
+        const { organizationId, userId } = request.query;
+
+        console.log('[SmartQueue] Fetching for:', { organizationId, userId });
+
+        if (!organizationId) {
+            return reply.status(400).send({ error: 'Missing organizationId' });
+        }
+
+        try {
+            // Fetch open leads for the org
+            const { data: leads, error } = await supabase
+                .from('leads')
+                .select('id, name, phone, company, status, priority, source, created_at, follow_up_at, score, last_activity_at')
+                .eq('organization_id', organizationId)
+                .neq('status', 'Closed')
+                .neq('status', 'Lost')
+                .order('follow_up_at', { ascending: true, nullsFirst: false }) // Follow ups first
+                .order('priority', { ascending: false }) // Then high priority (assuming text sort works rough, or use specific logic)
+                .order('created_at', { ascending: false })
+                .limit(50); // Batch size
+
+            if (error) {
+                console.error('[SmartQueue] Fetch failed:', error);
+                return reply.status(500).send({ error: 'Failed to fetch queue' });
+            }
+
+            // Optional: Filter by assignment if needed (e.g., owner_id === userId)
+            // For now, we return all org leads (Shared Queue)
+
+            console.log(`[SmartQueue] Found ${leads?.length || 0} leads`);
+
+            return reply.send({
+                success: true,
+                queue: leads || []
+            });
+
+        } catch (err) {
+            console.error('[SmartQueue] Error:', err);
+            return reply.status(500).send({ error: 'Internal server error' });
+        }
+    });
+
+    // ========================================
     // POST /api/leads/:id/status
     // Update lead status and create activity log
     // ========================================

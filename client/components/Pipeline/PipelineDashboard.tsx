@@ -64,25 +64,33 @@ export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode
       if (isRep || !currentUser?.organization_id) return;
 
       const { data } = await supabase
-        .from('users')
-        .select('id, name, avatar, role')
+        .from('profiles')
+        .select('id, full_name, avatar_url, role')
         .eq('organization_id', currentUser.organization_id);
 
-      if (data) setTeamMembers(data);
+      if (data) {
+        setTeamMembers(data.map((u: any) => ({
+          id: u.id,
+          name: u.full_name,
+          avatar: u.avatar_url,
+          role: u.role
+        })));
+      }
     };
     fetchTeam();
-  }, [currentUser, isRep]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.organization_id, isRep]);
 
   // Fetch Data
   useEffect(() => {
     const fetchData = async () => {
       if (!currentUser?.organization_id) {
-        console.log('Skipping fetch: No organization_id', currentUser);
+        // console.log('Skipping fetch: No organization_id', currentUser);
         setLoading(false);
         return;
       }
 
-      console.log('Fetching Pipeline Data. Org:', currentUser.organization_id);
+      // console.log('Fetching Pipeline Data. Org:', currentUser.organization_id);
 
       setLoading(true);
       try {
@@ -100,12 +108,17 @@ export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode
         const rangeParam = `&range=${dateRange === 'היום' ? 'day' : dateRange === 'שבוע' ? 'week' : 'month'}`; // Simplified range mapping
         const orgParam = currentUser?.organization_id ? `&organizationId=${currentUser.organization_id}` : '';
 
+        const { data: { session } } = await supabase.auth.getSession();
+        const headers = {
+          'Authorization': `Bearer ${session?.access_token}`
+        };
+
         const [funnelRes, sourcesRes, statsRes, riskRes, unassignedRes] = await Promise.all([
-          fetch(`/api/pipeline/funnel?${rangeParam.substring(1)}${userIdParam}${orgParam}`),
-          fetch(`/api/pipeline/sources?${rangeParam.substring(1)}${userIdParam}${orgParam}`),
-          fetch(`/api/panel/stats?${rangeParam.substring(1)}${userIdParam}${orgParam}`),
-          fetch(`/api/panel/at-risk-leads?limit=5${userIdParam}${orgParam}`),
-          !isRep ? fetch(`/api/pipeline/unassigned?limit=5${orgParam}`) : Promise.resolve({ json: () => ({ success: true, leads: [] }) })
+          fetch(`/api/pipeline/funnel?${rangeParam.substring(1)}${userIdParam}${orgParam}`, { headers }),
+          fetch(`/api/pipeline/sources?${rangeParam.substring(1)}${userIdParam}${orgParam}`, { headers }),
+          fetch(`/api/panel/stats?${rangeParam.substring(1)}${userIdParam}${orgParam}`, { headers }),
+          fetch(`/api/panel/at-risk-leads?limit=5${userIdParam}${orgParam}`, { headers }),
+          !isRep ? fetch(`/api/pipeline/unassigned?limit=5${orgParam}`, { headers }) : Promise.resolve({ json: () => ({ success: true, leads: [] }) })
         ]);
 
         const [funnel, sources, statsData, risk, unassigned] = await Promise.all([
@@ -130,7 +143,8 @@ export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode
     };
 
     fetchData();
-  }, [dateRange, selectedTeam, currentUser, isRep]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange, selectedTeam, currentUser?.organization_id, currentUser?.id, isRep]);
 
   // Derived Values
   const totalSourcesValue = sourcesData.reduce((acc, curr) => acc + curr[sourceMetric], 0);
