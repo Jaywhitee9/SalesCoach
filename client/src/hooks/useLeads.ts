@@ -95,8 +95,21 @@ export const useLeads = (initialStatus?: string, organizationId?: string) => {
             let ownerId = newLead.owner?.id;
 
             if (!ownerId || !uuidRegex.test(ownerId)) {
-                // If ID is missing or not a UUID (e.g. "u1"), fallback to current user
-                ownerId = session.user.id;
+                // Try auto-distribution first
+                try {
+                    const distRes = await fetch(`/api/org/next-assignee?organizationId=${profile.organization_id}`);
+                    const distJson = await distRes.json();
+                    if (distJson.success && distJson.autoDistribute && distJson.assignee?.id) {
+                        ownerId = distJson.assignee.id;
+                        console.log('[useLeads] Auto-assigned to:', distJson.assignee.name);
+                    } else {
+                        // Fallback to current user
+                        ownerId = session.user.id;
+                    }
+                } catch (distErr) {
+                    console.warn('[useLeads] Auto-distribute failed, using current user:', distErr);
+                    ownerId = session.user.id;
+                }
             }
 
             const payload = {

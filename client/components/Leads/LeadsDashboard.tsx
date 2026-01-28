@@ -12,7 +12,8 @@ import {
   UserPlus,
   Check,
   X,
-  RotateCcw
+  RotateCcw,
+  Settings
 } from 'lucide-react';
 import { Button } from '../Common/Button';
 import { LeadsTable } from './LeadsTable';
@@ -20,6 +21,8 @@ import { LeadsKanban } from './LeadsKanban';
 import { LeadDrawer } from './LeadDrawer';
 import { NewLeadDrawer } from './NewLeadDrawer';
 import { CSVImportModal } from './CSVImportModal';
+import { BulkAssignModal } from './BulkAssignModal';
+import { DistributionSettingsModal } from '../Settings/DistributionSettingsModal';
 import { User, Lead } from '../../types';
 import { supabase } from '../../src/lib/supabaseClient';
 import { useLeads } from '../../src/hooks/useLeads';
@@ -61,6 +64,8 @@ export const LeadsDashboard: React.FC<LeadsDashboardProps> = ({ isDarkMode, orgI
   const [isNewLeadOpen, setIsNewLeadOpen] = useState(false);
   const [newLeadInitialData, setNewLeadInitialData] = useState<Partial<Lead> | undefined>(undefined);
   const [isCSVImportOpen, setIsCSVImportOpen] = useState(false);
+  const [isBulkAssignOpen, setIsBulkAssignOpen] = useState(false);
+  const [isDistributionSettingsOpen, setIsDistributionSettingsOpen] = useState(false);
 
   const handleAddLead = (status?: string) => {
     setNewLeadInitialData(status ? { status } : undefined);
@@ -261,6 +266,33 @@ export const LeadsDashboard: React.FC<LeadsDashboardProps> = ({ isDarkMode, orgI
     refreshLeads();
   };
 
+  const handleBulkAssign = async (newOwnerId: string) => {
+    if (selectedIds.length === 0) return;
+
+    try {
+      // 1. Update in Supabase
+      const { error } = await supabase
+        .from('leads')
+        .update({ owner_id: newOwnerId })
+        .in('id', selectedIds);
+
+      if (error) throw error;
+
+      // 2. Refresh List
+      refreshLeads();
+
+      // 3. Clear Selection
+      setSelectedIds([]);
+
+      // 4. Close Modal (handled by component but good ensure)
+      setIsBulkAssignOpen(false);
+
+    } catch (err: any) {
+      alert('Failed to assign leads: ' + err.message);
+      console.error(err);
+    }
+  };
+
   return (
     <div className="flex-1 overflow-hidden flex flex-col h-full bg-slate-50 dark:bg-slate-950 relative">
 
@@ -271,6 +303,16 @@ export const LeadsDashboard: React.FC<LeadsDashboardProps> = ({ isDarkMode, orgI
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">ניהול כל ההזדמנויות והלקוחות הפוטנציאליים.</p>
         </div>
         <div className="flex items-center gap-3">
+          {/* Settings Button - Managers Only */}
+          {isManager && (
+            <button
+              onClick={() => setIsDistributionSettingsOpen(true)}
+              className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition-colors"
+              title="הגדרות חלוקת לידים"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          )}
           <Button variant="secondary" className="hidden sm:flex" onClick={() => setIsCSVImportOpen(true)}>
             <Upload className="w-4 h-4 ml-2" />
             ייבוא
@@ -452,7 +494,10 @@ export const LeadsDashboard: React.FC<LeadsDashboardProps> = ({ isDarkMode, orgI
             {selectedIds.length} נבחרו
           </span>
           <div className="flex items-center gap-2">
-            <button className="flex items-center gap-2 text-sm text-slate-300 hover:text-white px-2 py-1 rounded hover:bg-white/10 transition-colors">
+            <button
+              onClick={() => setIsBulkAssignOpen(true)}
+              className="flex items-center gap-2 text-sm text-slate-300 hover:text-white px-2 py-1 rounded hover:bg-white/10 transition-colors"
+            >
               <UserPlus className="w-4 h-4" />
               שנה בעלים
             </button>
@@ -553,6 +598,24 @@ export const LeadsDashboard: React.FC<LeadsDashboardProps> = ({ isDarkMode, orgI
         onImport={handleBulkImport}
         teamMembers={teamMembers}
       />
+
+      {/* 8. Bulk Assign Modal */}
+      <BulkAssignModal
+        isOpen={isBulkAssignOpen}
+        onClose={() => setIsBulkAssignOpen(false)}
+        onAssign={handleBulkAssign}
+        teamMembers={teamMembers}
+        selectedCount={selectedIds.length}
+      />
+
+      {/* 9. Distribution Settings Modal */}
+      {orgId && (
+        <DistributionSettingsModal
+          isOpen={isDistributionSettingsOpen}
+          onClose={() => setIsDistributionSettingsOpen(false)}
+          organizationId={orgId}
+        />
+      )}
 
     </div>
   );

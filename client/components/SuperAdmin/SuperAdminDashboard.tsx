@@ -174,7 +174,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onLogo
          setNewOrgPlan('free');
          fetchOrganizations();
       } catch (err: any) {
-         alert('Error: ' + err.message);
+         alert('שגיאה: ' + err.message);
       } finally {
          setActionLoading(false);
       }
@@ -198,7 +198,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onLogo
          setShowEditPlanModal(null);
          fetchOrganizations();
       } catch (err: any) {
-         alert('Error: ' + err.message);
+         alert('שגיאה: ' + err.message);
       } finally {
          setActionLoading(false);
       }
@@ -224,7 +224,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onLogo
          fetchOrganizations();
          fetchIsolationReport();
       } catch (err: any) {
-         alert('Error: ' + err.message);
+         alert('שגיאה: ' + err.message);
       } finally {
          setActionLoading(false);
       }
@@ -272,7 +272,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onLogo
          fetchOrganizations();
          fetchIsolationReport();
       } catch (err: any) {
-         alert('Error: ' + err.message);
+         alert('שגיאה: ' + err.message);
       } finally {
          setActionLoading(false);
       }

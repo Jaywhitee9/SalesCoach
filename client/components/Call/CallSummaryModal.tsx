@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   CheckCircle2,
@@ -11,7 +11,10 @@ import {
   Loader2,
   Save,
   MessageSquare,
-  Zap
+  Zap,
+  Volume2,
+  Play,
+  Pause
 } from 'lucide-react';
 import { Button } from '../Common/Button';
 import { DateTimePicker } from '../Common/DateTimePicker';
@@ -24,13 +27,15 @@ interface CallSummaryModalProps {
   leadId: string;
   callDuration: number; // seconds
   transcripts: Message[];
+  coachingTips?: any[]; // New prop for tips
 }
 
 export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
   leadName: propLeadName,
   leadId,
   callDuration,
-  transcripts
+  transcripts,
+  coachingTips = [] // Default to empty
 }) => {
   const {
     showSummaryModal,
@@ -56,6 +61,11 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
   const [showFollowUpForm, setShowFollowUpForm] = useState(false);
   const [showNotRelevantForm, setShowNotRelevantForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Recording playback state
+  const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
   // Lead name state - needs to reset when modal opens with new lead
   const [leadName, setLeadName] = useState(propLeadName);
@@ -99,6 +109,38 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
     };
     fetchLeadName();
   }, [leadId, showSummaryModal]);
+
+  // Fetch recording URL from call record
+  useEffect(() => {
+    const fetchRecording = async () => {
+      if (callSessionId && showSummaryModal) {
+        // Query calls table for recording URL
+        const { data, error } = await supabase
+          .from('calls')
+          .select('recording_url')
+          .eq('recording_url', `sid:${callSessionId}`)
+          .or(`recording_url.ilike.https%`)
+          .single();
+
+        if (!error && data?.recording_url && data.recording_url.startsWith('https')) {
+          setRecordingUrl(data.recording_url);
+        }
+      }
+    };
+    fetchRecording();
+  }, [callSessionId, showSummaryModal]);
+
+  // Audio playback toggle
+  const togglePlayback = () => {
+    if (audioRef.current) {
+      if (isPlaying) {
+        audioRef.current.pause();
+      } else {
+        audioRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
+  };
 
   if (!showSummaryModal) return null;
 
@@ -224,6 +266,25 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
             </div>
           )}
 
+          {/* Recording Player */}
+          {recordingUrl && (
+            <button
+              onClick={togglePlayback}
+              className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 rounded-lg hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors"
+              title="השמע הקלטה"
+            >
+              {isPlaying ? (
+                <Pause className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              ) : (
+                <Play className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              )}
+              <Volume2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">הקלטה</span>
+            </button>
+          )}
+          {/* Hidden audio element */}
+          <audio ref={audioRef} src={recordingUrl || undefined} onEnded={() => setIsPlaying(false)} />
+
           <button onClick={dismissSummaryModal} className="p-1 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full">
             <X className="w-5 h-5 text-slate-400" />
           </button>
@@ -291,6 +352,32 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
                   )}
                 </div>
               </div>
+
+
+              {/* Coaching Tips History */}
+              {coachingTips.length > 0 && (
+                <div className="bg-slate-50 dark:bg-slate-900/50 rounded-xl p-4 border border-slate-200 dark:border-slate-800">
+                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-500" />
+                    טיפים שניתנו בשיחה
+                  </h3>
+                  <div className="space-y-3">
+                    {coachingTips.map((tip, idx) => (
+                      <div k={idx} className="flex gap-3 items-start relative animate-in slide-in-from-right-2 duration-300" style={{ animationDelay: `${idx * 100}ms` }}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${tip.severity === 'critical' ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                          <Zap className="w-4 h-4" />
+                        </div>
+                        <div className="bg-white dark:bg-slate-800 p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-sm shadow-sm flex-1">
+                          <p className="text-slate-700 dark:text-slate-300">{tip.message}</p>
+                          <span className="text-xs text-slate-400 mt-1 block">
+                            {new Date(tip.timestamp).toLocaleTimeString('he-IL', { minute: '2-digit', second: '2-digit' })}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Outcome Selection */}
               <div>

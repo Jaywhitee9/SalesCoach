@@ -71,6 +71,9 @@ After deployment, copy your Render URL (e.g., `https://salescoach-api.onrender.c
 4. Go to **TwiML Apps** → Your app
 5. Set Voice URL: `https://salescoach-api.onrender.com/voice`
 
+> **Note**: The recording callback (`/recording-callback`) is automatically configured in TwiML.
+> Recordings are saved and playable in the Call Summary modal.
+
 ---
 
 ## Step 5: Update Frontend Config

@@ -78,5 +78,6 @@ async function getSystemUserId() {
 
 module.exports = {
     supabase,
+    supabaseAdmin: supabase, // Alias for compatibility
     getSystemUserId
 };

@@ -116,10 +116,13 @@ async function registerTwilioRoutes(fastify) {
             }
 
             if (targetNumber && targetNumber !== process.env.TWILIO_PHONE_NUMBER) {
-                // Outbound or forwarding
+                // Outbound or forwarding - Enable recording with callback
                 const dial = response.dial({
                     callerId: process.env.TWILIO_PHONE_NUMBER,
-                    answerOnBridge: true
+                    answerOnBridge: true,
+                    record: 'record-from-answer-dual',
+                    recordingStatusCallback: `${process.env.RENDER_EXTERNAL_URL || 'https://sales-coach.onrender.com'}/recording-callback`,
+                    recordingStatusCallbackEvent: 'completed'
                 });
                 dial.number(targetNumber);
             } else {
@@ -389,6 +392,46 @@ async function registerTwilioRoutes(fastify) {
             console.warn(`[Handler] Error processing transcript for ${callSid}:`, err.message);
         }
     };
+
+    // Recording Status Callback - Receives actual Twilio recording URL
+    fastify.post('/recording-callback', async (request, reply) => {
+        try {
+            const {
+                CallSid,
+                RecordingUrl,
+                RecordingSid,
+                RecordingDuration
+            } = request.body;
+
+            console.log(`[Recording] Received callback for call ${CallSid}:`, {
+                RecordingSid,
+                RecordingDuration,
+                RecordingUrl
+            });
+
+            if (RecordingUrl && CallSid) {
+                // Update the call record with the actual recording URL
+                const { error } = await supabase
+                    .from('calls')
+                    .update({
+                        recording_url: `${RecordingUrl}.mp3`, // Append .mp3 for direct playback
+                        duration: parseInt(RecordingDuration) || null
+                    })
+                    .eq('recording_url', `sid:${CallSid}`);
+
+                if (error) {
+                    console.error('[Recording] Failed to update call with recording URL:', error.message);
+                } else {
+                    console.log(`[Recording] Updated call ${CallSid} with recording URL`);
+                }
+            }
+
+            reply.code(200).send({ success: true });
+        } catch (err) {
+            console.error('[Recording] Callback error:', err);
+            reply.code(500).send({ error: 'Recording callback failed' });
+        }
+    });
 }
 
 module.exports = registerTwilioRoutes;

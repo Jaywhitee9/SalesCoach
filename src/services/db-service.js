@@ -78,6 +78,7 @@ class DBService {
                     status: 'completed',
                     duration: Math.floor((Date.now() - callData.startTime) / 1000),
                     transcript: callData.transcripts,
+                    coaching_tips: callData.coachingHistory || [],
                 })
                 .eq('recording_url', recordingUrlToMatch)
                 .select()
@@ -98,6 +99,7 @@ class DBService {
                     recording_url: `sid:${callData.callSid}`,
                     duration: Math.floor((Date.now() - callData.startTime) / 1000),
                     transcript: callData.transcripts,
+                    coaching_tips: callData.coachingHistory || [],
                     created_at: new Date(callData.startTime).toISOString()
                 });
                 if (insertError) throw insertError;

@@ -59,6 +59,7 @@ interface CallContextType {
     setActiveLeadId: (id: string | null) => void;
     // New
     historyCalls: any[];
+    coachingTips: any[]; // New: Real-time accumulated tips
     callSummary: CallSummaryData | null;
     // P0: Summary Modal States
     showSummaryModal: boolean;
@@ -135,6 +136,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         leadId: string | null;
         summary: any;
         transcripts: Message[];
+        coachingTips: any[]; // New
         duration: number;
     } | null>(null);
 
@@ -211,6 +213,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         stage: 'פתיחה',
         insight: 'המערכת ממתינה לנתונים...',
     });
+    const [coachingTips, setCoachingTips] = useState<any[]>([]); // New: Accumulator
     const [callSummary, setCallSummary] = useState<CallSummaryData | null>(null);
 
     const wsRef = useRef<WebSocket | null>(null);
@@ -616,6 +619,20 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         suggestion: data.suggested_reply,
                         signals: data.signals || prev.signals || [],
                     }));
+
+                    // Accumulate unique tips for history
+                    setCoachingTips(prev => {
+                        // Avoid duplicates if same message comes twice
+                        const isDuplicate = prev.some(tip => tip.message === data.message && Math.abs(tip.timestamp - Date.now()) < 5000);
+                        if (isDuplicate) return prev;
+
+                        return [...prev, {
+                            type: 'coaching',
+                            message: data.message,
+                            severity: data.severity || 'info',
+                            timestamp: Date.now()
+                        }];
+                    });
                 }
 
                 if (data.type === 'call_summary') {
@@ -643,6 +660,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // Reset state for new call
             setCallDuration(0); // Reset duration for new call
             setTranscripts([]);
+            setCoachingTips([]); // Reset tips
             setCallSummary(null);
             setCoachingData({ score: 50, stage: 'פתיחה', insight: 'מחבר שיחה...' });
 
@@ -816,6 +834,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 leadId: activeLeadId,
                 summary: callSummary,
                 transcripts: [...transcripts],
+                coachingTips: coachingTips,
                 duration: callDuration
             });
         }

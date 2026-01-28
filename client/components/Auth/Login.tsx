@@ -33,10 +33,10 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) { alert("Login failed: " + error.message); return; }
+      if (error) { alert("התחברות נכשלה: " + error.message); return; }
 
       const user = data?.user;
-      if (!user) { alert("Login failed: no user returned."); return; }
+      if (!user) { alert("התחברות נכשלה: לא התקבל משתמש."); return; }
 
       let profile: any = null;
       let lastErr: any = null;
@@ -56,7 +56,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
       if (!profile) {
         console.error("Profile fetch failed:", lastErr);
-        alert("Login succeeded but profile not found. Try again in a moment.");
+        alert("ההתחברות הצליחה אבל הפרופיל לא נמצא. נסה שוב בעוד רגע.");
         return;
       }
 
@@ -78,7 +78,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
     } catch (err) {
       console.error("Login Error:", err);
-      alert("Unexpected login error. Check console.");
+      alert("שגיאה לא צפויה בהתחברות. בדוק את הקונסולה.");
     } finally {
       setIsLoading(false);
     }
@@ -202,8 +202,8 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 <ShieldAlert className="w-4 h-4" />
               </div>
               <div>
-                <span className="block text-[10px] font-bold text-slate-900 dark:text-white group-hover:text-indigo-700 dark:group-hover:text-indigo-300 transition-colors">Admin</span>
-                <span className="block text-[9px] text-slate-500">System</span>
+                <span className="block text-[10px] font-bold text-slate-900 dark:text-white group-hover:text-indigo-700 dark:group-hover:text-indigo-300 transition-colors">מנהל מערכת</span>
+                <span className="block text-[9px] text-slate-500">סופר אדמין</span>
               </div>
             </button>
           </div>
@@ -212,7 +212,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
         {/* Footer */}
         <div className="mt-auto pt-10 text-xs text-slate-400 text-center lg:text-right">
-          © 2024 SalesFlow AI. All rights reserved.
+          © 2024 SalesFlow AI. כל הזכויות שמורות.
         </div>
       </div>
 
@@ -236,7 +236,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
               </div>
               <div>
                 <h3 className="text-white font-bold text-xl leading-tight">ביצועים בזמן אמת</h3>
-                <p className="text-emerald-200 text-xs font-medium uppercase tracking-wide opacity-80">AI Coaching Impact</p>
+                <p className="text-emerald-200 text-xs font-medium uppercase tracking-wide opacity-80">השפעת הקואוצ'ינג</p>
               </div>
             </div>
 

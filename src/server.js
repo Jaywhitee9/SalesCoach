@@ -25,6 +25,15 @@ fastify.get('/health', async (request, reply) => {
     return { status: 'ok', timestamp: new Date().toISOString() };
 });
 
+// SPA Fallback: Serve index.html for all non-API routes (client-side routing)
+fastify.setNotFoundHandler((request, reply) => {
+    // Only serve index.html for non-API routes
+    if (!request.url.startsWith('/api') && !request.url.startsWith('/voice') && !request.url.startsWith('/token') && !request.url.startsWith('/ws')) {
+        return reply.sendFile('index.html');
+    }
+    return reply.code(404).send({ error: 'Not Found', statusCode: 404 });
+});
+
 
 
 // Start Server

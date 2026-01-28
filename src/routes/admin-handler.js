@@ -364,7 +364,9 @@ async function registerAdminRoutes(fastify) {
 
             // TODO: Send email with invitation link
             // For now, return the token (in production, send via email)
-            const inviteLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/invite/${token}`;
+            // Use RENDER_EXTERNAL_URL if available (automatic in Render), otherwise configured FRONTEND_URL, or localhost
+            const baseUrl = process.env.RENDER_EXTERNAL_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
+            const inviteLink = `${baseUrl}/invite/${token}`;
 
             return {
                 success: true,

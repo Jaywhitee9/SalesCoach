@@ -1317,6 +1317,129 @@ async function registerApiRoutes(fastify) {
         }
     });
 
+    // =====================================
+    // LEAD DISTRIBUTION SETTINGS
+    // =====================================
+
+    // GET Distribution Settings
+    fastify.get('/api/org/distribution-settings', async (request, reply) => {
+        try {
+            const { organizationId } = request.query;
+            if (!organizationId) {
+                return reply.code(400).send({ error: 'organizationId required' });
+            }
+
+            const { data, error } = await require('../services/supabase').supabaseAdmin
+                .from('organization_settings')
+                .select('auto_distribute, distribution_method, last_assigned_index')
+                .eq('organization_id', organizationId)
+                .single();
+
+            if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no rows
+
+            return {
+                success: true,
+                settings: data || { auto_distribute: false, distribution_method: 'round_robin', last_assigned_index: 0 }
+            };
+        } catch (err) {
+            console.error('[API] Get Distribution Settings Error:', err.message);
+            return reply.code(500).send({ error: 'Failed to fetch settings' });
+        }
+    });
+
+    // POST Update Distribution Settings
+    fastify.post('/api/org/distribution-settings', async (request, reply) => {
+        try {
+            const { organizationId, auto_distribute, distribution_method } = request.body;
+            if (!organizationId) {
+                return reply.code(400).send({ error: 'organizationId required' });
+            }
+
+            const updates = {};
+            if (typeof auto_distribute === 'boolean') updates.auto_distribute = auto_distribute;
+            if (distribution_method) updates.distribution_method = distribution_method;
+
+            // Upsert: Insert if not exists, update if exists
+            const { error } = await require('../services/supabase').supabaseAdmin
+                .from('organization_settings')
+                .upsert({
+                    organization_id: organizationId,
+                    ...updates
+                }, { onConflict: 'organization_id' });
+
+            if (error) throw error;
+
+            return { success: true };
+        } catch (err) {
+            console.error('[API] Update Distribution Settings Error:', err.message);
+            return reply.code(500).send({ error: 'Failed to update settings' });
+        }
+    });
+
+    // GET Next Assignee (Round Robin)
+    fastify.get('/api/org/next-assignee', async (request, reply) => {
+        try {
+            const { organizationId } = request.query;
+            if (!organizationId) {
+                return reply.code(400).send({ error: 'organizationId required' });
+            }
+
+            // 1. Get all active sales reps in the organization
+            const { data: reps, error: repsError } = await require('../services/supabase').supabaseAdmin
+                .from('profiles')
+                .select('id, full_name')
+                .eq('organization_id', organizationId)
+                .in('role', ['rep', 'manager']) // Both can receive leads
+                .order('created_at', { ascending: true });
+
+            if (repsError) throw repsError;
+
+            if (!reps || reps.length === 0) {
+                return { success: false, error: 'No sales reps available', assignee: null };
+            }
+
+            // 2. Get current distribution index
+            const { data: settings, error: settingsError } = await require('../services/supabase').supabaseAdmin
+                .from('organization_settings')
+                .select('last_assigned_index, auto_distribute')
+                .eq('organization_id', organizationId)
+                .single();
+
+            if (settingsError && settingsError.code !== 'PGRST116') throw settingsError;
+
+            const lastIndex = settings?.last_assigned_index || 0;
+            const autoDistribute = settings?.auto_distribute || false;
+
+            if (!autoDistribute) {
+                return { success: true, autoDistribute: false, assignee: null };
+            }
+
+            // 3. Calculate next index (Round Robin)
+            const nextIndex = (lastIndex + 1) % reps.length;
+            const assignee = reps[nextIndex];
+
+            // 4. Update the index in database
+            await require('../services/supabase').supabaseAdmin
+                .from('organization_settings')
+                .upsert({
+                    organization_id: organizationId,
+                    last_assigned_index: nextIndex
+                }, { onConflict: 'organization_id' });
+
+            return {
+                success: true,
+                autoDistribute: true,
+                assignee: {
+                    id: assignee.id,
+                    name: assignee.full_name
+                }
+            };
+        } catch (err) {
+            console.error('[API] Next Assignee Error:', err.message);
+            return reply.code(500).send({ error: 'Failed to get next assignee' });
+        }
+    });
+
 }
 
 module.exports = registerApiRoutes;
