@@ -406,7 +406,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ isDarkMode, 
               <div className="flex flex-col">
                 <span className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{kpi.value}</span>
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-400">{kpi.subtext}</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">יעד: <span className="text-brand-600 dark:text-brand-400">{kpi.subtext?.replace('יעד: ', '')}</span></span>
                   {kpi.trendDirection !== 'neutral' && (
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center ${kpi.trendDirection === 'up'
                       ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400'
@@ -581,7 +581,7 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ isDarkMode, 
                               {deal.stage}
                             </span>
                           </td>
-                          <td className="py-3 font-bold text-slate-900 dark:text-white text-left tabular-nums">{deal.value}</td>
+                          <td className="py-3.5 font-bold text-slate-900 dark:text-white text-left tabular-nums text-base tracking-wide ltr">{deal.value}</td>
                         </tr>
                       )))}
                   </tbody>

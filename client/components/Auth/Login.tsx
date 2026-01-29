@@ -418,7 +418,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
               onClick={() => setShowContactForm(true)}
               className="text-lg font-bold text-brand-600 hover:text-brand-700 dark:text-brand-400 transition-colors underline decoration-2 underline-offset-4 hover:decoration-brand-400"
             >
-              צור קשר למידע נוסף →
+              צור קשר למידע נוסף ←
             </button>
           </div>
 
