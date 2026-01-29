@@ -13,7 +13,6 @@ import {
   Target,
   BarChart3,
   Phone,
-  ArrowLeft,
   Send,
   User,
   Building2,
@@ -189,17 +188,17 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   // Contact Form View
   if (showContactForm) {
     return (
-      <div className="min-h-screen flex w-full bg-white dark:bg-slate-950 font-sans overflow-hidden">
+      <div className="min-h-screen flex w-full bg-white dark:bg-slate-950 font-sans overflow-hidden animate-in fade-in duration-300">
         {/* Right Side - Contact Form */}
-        <div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-8 lg:p-16 relative z-10 bg-white dark:bg-slate-950">
-          <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="w-full lg:w-1/2 min-h-screen flex flex-col justify-center items-center p-8 lg:p-16 relative z-10 bg-white dark:bg-slate-950">
+          <div className="w-full max-w-md animate-in fade-in slide-in-from-right-4 duration-500">
 
-            {/* Back Button */}
+            {/* Back Button - Arrow points RIGHT for RTL */}
             <button
               onClick={() => { setShowContactForm(false); setSubmitSuccess(false); }}
-              className="flex items-center gap-2 text-slate-500 hover:text-brand-600 mb-8 transition-colors"
+              className="flex items-center gap-2 text-slate-500 hover:text-brand-600 mb-8 transition-all hover:gap-3"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowRight className="w-4 h-4" />
               <span>חזרה להתחברות</span>
             </button>
 
