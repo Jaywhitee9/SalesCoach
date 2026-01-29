@@ -338,7 +338,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     <div className="min-h-screen flex w-full bg-white dark:bg-slate-950 font-sans overflow-hidden">
 
       {/* Right Side - Form */}
-      <div className="w-full lg:w-1/2 flex flex-col justify-center items-center p-8 lg:p-16 relative z-10 bg-white dark:bg-slate-950">
+      <div className="w-full lg:w-1/2 min-h-screen flex flex-col justify-center items-center p-8 lg:p-16 relative z-10 bg-white dark:bg-slate-950">
         <div className="w-full max-w-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
 
           {/* Header */}
@@ -421,11 +421,11 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             </button>
           </p>
 
-        </div>
+          {/* Footer - Inside the form container */}
+          <div className="mt-10 text-xs text-slate-400 text-center">
+            © 2024 SalesFlow AI. כל הזכויות שמורות.
+          </div>
 
-        {/* Footer */}
-        <div className="mt-auto pt-10 text-xs text-slate-400 text-center">
-          © 2024 SalesFlow AI. כל הזכויות שמורות.
         </div>
       </div>
 
@@ -495,8 +495,8 @@ const LeftPanel = ({ testimonial, currentTestimonial, isAnimating, setCurrentTes
                 }, 400);
               }}
               className={`h-1.5 rounded-full transition-all duration-300 ${idx === currentTestimonial
-                  ? 'bg-brand-400 w-6'
-                  : 'bg-white/20 hover:bg-white/40 w-1.5'
+                ? 'bg-brand-400 w-6'
+                : 'bg-white/20 hover:bg-white/40 w-1.5'
                 }`}
             />
           ))}
