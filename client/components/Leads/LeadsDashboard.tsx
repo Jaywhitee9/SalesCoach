@@ -26,6 +26,7 @@ import { DistributionSettingsModal } from '../Settings/DistributionSettingsModal
 import { User, Lead } from '../../types';
 import { supabase } from '../../src/lib/supabaseClient';
 import { useLeads } from '../../src/hooks/useLeads';
+import { useOrganizationSettings } from '../../src/hooks/useOrganizationSettings';
 
 interface LeadsDashboardProps {
   isDarkMode: boolean;
@@ -40,6 +41,7 @@ export type SortConfig = {
 
 export const LeadsDashboard: React.FC<LeadsDashboardProps> = ({ isDarkMode, orgId, user }) => {
   const { leads, loading, error, refreshLeads, addLead, deleteLead, updateLead, generateAiScore } = useLeads(undefined, orgId, user?.id, user?.role);
+  const { settings: orgSettings } = useOrganizationSettings(orgId);
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>(() => {
     if (typeof window !== 'undefined') {
       return (localStorage.getItem('leadsViewMode') as 'list' | 'kanban') || 'list';
@@ -233,14 +235,14 @@ export const LeadsDashboard: React.FC<LeadsDashboardProps> = ({ isDarkMode, orgI
     setOpenFilter(null);
   };
 
-  // Status Mapping for UI
-  const statusOptions = [
-    { id: 'New', label: 'ליד חדש' },
-    { id: 'Discovery', label: 'גילוי צרכים' },
-    { id: 'Negotiation', label: 'בתהליך / פגישה' },
-    { id: 'Proposal', label: 'הצעת מחיר' },
-    { id: 'Follow Up', label: 'פולואפ' },
-    { id: 'Closed', label: 'סגור - הצלחה' },
+  // Dynamic Status Options from Settings
+  const statusOptions = orgSettings?.pipeline_statuses || [
+    { id: 'New', label: 'ליד חדש', color: '#3B82F6' },
+    { id: 'Discovery', label: 'גילוי צרכים', color: '#8B5CF6' },
+    { id: 'Proposal', label: 'הצעת מחיר', color: '#10B981' },
+    { id: 'Negotiation', label: 'בתהליך / פגישה', color: '#EC4899' },
+    { id: 'Follow Up', label: 'פולואפ', color: '#F59E0B' },
+    { id: 'Closed', label: 'סגור - הצלחה', color: '#059669' },
   ];
 
   const handleSaveNewLead = async (newLeadData: Partial<Lead>) => {
@@ -542,6 +544,7 @@ export const LeadsDashboard: React.FC<LeadsDashboardProps> = ({ isDarkMode, orgI
               onSort={handleSort}
               onUpdateLead={(id, updates) => updateLead(id, updates)}
               onDeleteLead={(id) => deleteLead(id)}
+              statuses={statusOptions}
             />
           ) : (
             <LeadsKanban
@@ -549,6 +552,7 @@ export const LeadsDashboard: React.FC<LeadsDashboardProps> = ({ isDarkMode, orgI
               onSelectLead={(l) => setSelectedLeadId(l.id)}
               onUpdateLead={(id, updates) => updateLead(id, updates)}
               onAddLead={handleAddLead}
+              statuses={statusOptions}
               onDeleteLead={(id) => {
                 if (confirm('האם אתה בטוח שברצונך למחוק ליד זה?')) {
                   deleteLead(id);

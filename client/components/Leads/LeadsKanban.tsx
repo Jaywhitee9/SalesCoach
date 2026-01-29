@@ -4,23 +4,22 @@ import { Lead } from '../../types';
 import { MoreHorizontal, Plus, Trash2, Edit } from 'lucide-react';
 import { Badge } from '../Common/Badge';
 
+interface Status {
+  id: string;
+  label: string;
+  color: string;
+}
+
 interface LeadsKanbanProps {
   leads: Lead[];
   onSelectLead: (lead: Lead) => void;
   onUpdateLead: (leadId: string, updates: Partial<Lead>) => void;
   onDeleteLead?: (leadId: string) => void;
   onAddLead?: (status: string) => void;
+  statuses: Status[];
 }
 
-const COLUMNS = [
-  { id: 'New', label: 'ליד חדש', color: 'bg-indigo-500' },
-  { id: 'Discovery', label: 'גילוי צרכים', color: 'bg-purple-500' },
-  { id: 'Proposal', label: 'הצעת מחיר', color: 'bg-pink-500' },
-  { id: 'Negotiation', label: 'משא ומתן', color: 'bg-amber-500' },
-  { id: 'Closed', label: 'סגור', color: 'bg-emerald-500' },
-];
-
-export const LeadsKanban: React.FC<LeadsKanbanProps> = ({ leads, onSelectLead, onUpdateLead, onDeleteLead, onAddLead }) => {
+export const LeadsKanban: React.FC<LeadsKanbanProps> = ({ leads, onSelectLead, onUpdateLead, onDeleteLead, onAddLead, statuses }) => {
   const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [columnMenuOpenId, setColumnMenuOpenId] = useState<string | null>(null);
@@ -57,7 +56,7 @@ export const LeadsKanban: React.FC<LeadsKanbanProps> = ({ leads, onSelectLead, o
         setColumnMenuOpenId(null); // Close column menus too
       }}
     >
-      {COLUMNS.map((col) => {
+      {statuses.map((col) => {
         const colLeads = leads.filter(l => l.status === col.id);
 
         return (
@@ -70,7 +69,7 @@ export const LeadsKanban: React.FC<LeadsKanbanProps> = ({ leads, onSelectLead, o
             {/* Header */}
             <div className="flex items-center justify-between mb-3 px-1 relative">
               <div className="flex items-center gap-2">
-                <div className={`w-2.5 h-2.5 rounded-full ${col.color}`}></div>
+                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: col.color }}></div>
                 <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200">{col.label}</h3>
                 <span className="text-xs text-slate-400 font-medium">({colLeads.length})</span>
               </div>
