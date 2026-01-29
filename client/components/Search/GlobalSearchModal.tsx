@@ -53,7 +53,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         }
     }, [isOpen]);
 
-    // Search function
+    // Search function - OPTIMIZED with parallel queries
     const performSearch = useCallback(async (searchQuery: string) => {
         if (!searchQuery.trim() || searchQuery.length < 2) {
             setResults([]);
@@ -61,59 +61,65 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         }
 
         setLoading(true);
-        const searchResults: SearchResult[] = [];
         const isManager = userRole === 'manager' || userRole === 'sales_manager' || userRole === 'admin' || userRole === 'super_admin' || userRole === 'platform_admin';
 
         try {
-            // Search Leads
+            // Build all queries at once
             let leadsQuery = supabase
                 .from('leads')
                 .select('id, name, company, phone, email, status')
                 .or(`name.ilike.%${searchQuery}%,company.ilike.%${searchQuery}%,phone.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`)
-                .limit(5);
+                .limit(6);
 
+            let tasksQuery = supabase
+                .from('tasks')
+                .select('id, title, due_date, status')
+                .ilike('title', `%${searchQuery}%`)
+                .limit(4);
+
+            let profilesQuery = isManager ? supabase
+                .from('profiles')
+                .select('id, full_name, email, role')
+                .or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`)
+                .limit(3) : null;
+
+            // Apply filters
             if (orgId) {
                 leadsQuery = leadsQuery.eq('organization_id', orgId);
+                tasksQuery = tasksQuery.eq('organization_id', orgId);
+                if (profilesQuery) profilesQuery = profilesQuery.eq('organization_id', orgId);
             }
             if (userId && !isManager) {
                 leadsQuery = leadsQuery.eq('owner_id', userId);
+                tasksQuery = tasksQuery.eq('assigned_to', userId);
             }
 
-            const { data: leads } = await leadsQuery;
-            if (leads) {
-                leads.forEach((lead: any) => {
+            // Execute queries in parallel
+            const [leadsRes, tasksRes, profilesRes] = await Promise.all([
+                leadsQuery,
+                tasksQuery,
+                profilesQuery ? profilesQuery : Promise.resolve({ data: [] })
+            ]);
+
+            const searchResults: SearchResult[] = [];
+
+            // Process leads
+            if (leadsRes.data) {
+                (leadsRes.data as any[]).forEach((lead: any) => {
                     searchResults.push({
                         id: lead.id,
                         type: 'lead',
                         title: lead.name,
                         subtitle: lead.company || lead.phone || '',
                         icon: <UserIcon className="w-4 h-4 text-brand-500" />,
-                        metadata: {
-                            status: lead.status,
-                            phone: lead.phone,
-                            email: lead.email
-                        }
+                        metadata: { status: lead.status, phone: lead.phone, email: lead.email }
                     });
                 });
             }
 
-            // Search Tasks
-            let tasksQuery = supabase
-                .from('tasks')
-                .select('id, title, due_date, status')
-                .ilike('title', `%${searchQuery}%`)
-                .limit(5);
-
-            if (orgId) {
-                tasksQuery = tasksQuery.eq('organization_id', orgId);
-            }
-            if (userId && !isManager) {
-                tasksQuery = tasksQuery.eq('assigned_to', userId);
-            }
-
-            const { data: tasks } = await tasksQuery;
-            if (tasks) {
-                tasks.forEach((task: any) => {
+            // Process tasks
+            if (tasksRes.data) {
+                (tasksRes.data as any[]).forEach((task: any) => {
                     searchResults.push({
                         id: task.id,
                         type: 'task',
@@ -125,30 +131,17 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                 });
             }
 
-            // Search Team Members (for managers)
-            if (isManager) {
-                let profilesQuery = supabase
-                    .from('profiles')
-                    .select('id, full_name, email, role')
-                    .or(`full_name.ilike.%${searchQuery}%,email.ilike.%${searchQuery}%`)
-                    .limit(3);
-
-                if (orgId) {
-                    profilesQuery = profilesQuery.eq('organization_id', orgId);
-                }
-
-                const { data: profiles } = await profilesQuery;
-                if (profiles) {
-                    profiles.forEach((profile: any) => {
-                        searchResults.push({
-                            id: profile.id,
-                            type: 'profile',
-                            title: profile.full_name,
-                            subtitle: profile.role === 'manager' ? 'מנהל' : 'נציג',
-                            icon: <Building2 className="w-4 h-4 text-slate-500" />
-                        });
+            // Process profiles (managers only)
+            if (profilesRes && profilesRes.data) {
+                (profilesRes.data as any[]).forEach((profile: any) => {
+                    searchResults.push({
+                        id: profile.id,
+                        type: 'profile',
+                        title: profile.full_name,
+                        subtitle: profile.role === 'manager' ? 'מנהל' : 'נציג',
+                        icon: <Building2 className="w-4 h-4 text-slate-500" />
                     });
-                }
+                });
             }
 
             setResults(searchResults);
@@ -160,11 +153,11 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
         }
     }, [orgId, userId, userRole]);
 
-    // Debounced search
+    // Debounced search - FASTER (150ms instead of 300ms)
     useEffect(() => {
         const timer = setTimeout(() => {
             performSearch(query);
-        }, 300);
+        }, 150);
         return () => clearTimeout(timer);
     }, [query, performSearch]);
 
@@ -280,8 +273,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                                                     key={result.id}
                                                     onClick={() => handleSelect(result)}
                                                     className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-right transition-colors ${isSelected
-                                                            ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-900 dark:text-brand-100'
-                                                            : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-900 dark:text-white'
+                                                        ? 'bg-brand-50 dark:bg-brand-900/20 text-brand-900 dark:text-brand-100'
+                                                        : 'hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-900 dark:text-white'
                                                         }`}
                                                 >
                                                     <div className={`p-2 rounded-lg flex-shrink-0 ${isSelected ? 'bg-brand-100 dark:bg-brand-900/40' : 'bg-slate-100 dark:bg-slate-800'}`}>
