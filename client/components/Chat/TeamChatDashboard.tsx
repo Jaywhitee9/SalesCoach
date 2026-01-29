@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ChatMessage, User } from '../../types';
-import { Search, Send, Paperclip, Check, CheckCheck, MessageSquare, Phone, MoreVertical, Star, Loader2, Bell, BellRing } from 'lucide-react';
+import { Search, Send, Paperclip, Check, CheckCheck, MessageSquare, Phone, MoreVertical, Star, Loader2, Bell, BellRing, ChevronDown, Users } from 'lucide-react';
 import { supabase } from '../../src/lib/supabaseClient';
 
 interface TeamMember {
@@ -29,6 +29,7 @@ export const TeamChatDashboard: React.FC<TeamChatDashboardProps> = ({ isDarkMode
    const [loadingTeam, setLoadingTeam] = useState(true);
    const [searchQuery, setSearchQuery] = useState('');
    const [totalUnread, setTotalUnread] = useState(0);
+   const [showMobileSelector, setShowMobileSelector] = useState(false);
    const messagesEndRef = useRef<HTMLDivElement>(null);
    const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -418,9 +419,71 @@ export const TeamChatDashboard: React.FC<TeamChatDashboardProps> = ({ isDarkMode
          <div className="flex-1 flex flex-col min-w-0 bg-slate-50/30 dark:bg-slate-950">
 
             {/* Context Header */}
-            <div className="h-16 px-6 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between shadow-sm z-10">
+            <div className="h-16 px-4 md:px-6 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex items-center justify-between shadow-sm z-10">
+               {/* Mobile Contact Selector */}
+               <div className="md:hidden relative flex-1">
+                  <button
+                     onClick={() => setShowMobileSelector(!showMobileSelector)}
+                     className="flex items-center gap-3 w-full"
+                  >
+                     {activeRep ? (
+                        <>
+                           <img
+                              src={activeRep.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(activeRep.full_name)}&background=6366f1&color=fff`}
+                              alt={activeRep.full_name}
+                              className="w-9 h-9 rounded-full border-2 border-slate-200 dark:border-slate-700"
+                           />
+                           <div className="flex-1 text-right">
+                              <h2 className="text-sm font-bold text-slate-900 dark:text-white">{activeRep.full_name}</h2>
+                              <span className="text-[10px] text-slate-500">{(activeRep.role === 'manager' || activeRep.role === 'sales_manager') ? 'מנהל' : 'נציג'}</span>
+                           </div>
+                        </>
+                     ) : (
+                        <div className="flex items-center gap-2 text-slate-500">
+                           <Users className="w-5 h-5" />
+                           <span className="text-sm font-medium">בחר איש קשר</span>
+                        </div>
+                     )}
+                     <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showMobileSelector ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {/* Mobile Dropdown */}
+                  {showMobileSelector && (
+                     <>
+                        <div className="fixed inset-0 z-20" onClick={() => setShowMobileSelector(false)}></div>
+                        <div className="absolute top-full right-0 left-0 mt-2 max-h-72 overflow-y-auto bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-30 animate-in fade-in slide-in-from-top-2 duration-200">
+                           {filteredMembers.map(rep => (
+                              <button
+                                 key={rep.id}
+                                 onClick={() => { setSelectedRepId(rep.id); setShowMobileSelector(false); }}
+                                 className={`w-full flex items-center gap-3 p-3 text-right hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors ${selectedRepId === rep.id ? 'bg-brand-50 dark:bg-brand-900/20' : ''}`}
+                              >
+                                 <div className="relative">
+                                    <img
+                                       src={rep.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(rep.full_name)}&background=6366f1&color=fff`}
+                                       alt={rep.full_name}
+                                       className="w-9 h-9 rounded-full border border-slate-200 dark:border-slate-700"
+                                    />
+                                    {rep.unreadCount > 0 && (
+                                       <span className="absolute -top-1 -left-1 min-w-[18px] h-[18px] bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1">
+                                          {rep.unreadCount}
+                                       </span>
+                                    )}
+                                 </div>
+                                 <div className="flex-1">
+                                    <p className="text-sm font-semibold text-slate-900 dark:text-white">{rep.full_name}</p>
+                                    <p className="text-xs text-slate-500 truncate">{rep.lastMessageContent || 'לחץ לשיחה'}</p>
+                                 </div>
+                              </button>
+                           ))}
+                        </div>
+                     </>
+                  )}
+               </div>
+
+               {/* Desktop Header */}
                {activeRep ? (
-                  <div className="flex items-center gap-4">
+                  <div className="hidden md:flex items-center gap-4">
                      <img
                         src={activeRep.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(activeRep.full_name)}&background=6366f1&color=fff`}
                         alt={activeRep.full_name}
@@ -432,7 +495,7 @@ export const TeamChatDashboard: React.FC<TeamChatDashboardProps> = ({ isDarkMode
                      </div>
                   </div>
                ) : (
-                  <div></div>
+                  <div className="hidden md:block"></div>
                )}
 
                <div className="flex items-center gap-2">

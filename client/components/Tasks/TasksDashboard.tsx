@@ -222,16 +222,16 @@ const RepTasksView: React.FC<{
       {/* 2. KPI Cards - Premium Look */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-10 px-4 md:px-6">
         {/* Open Tasks */}
-        <div className="group bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-card hover:shadow-card-hover border border-slate-100 dark:border-slate-800 transition-all duration-300 relative overflow-hidden">
+        <div className="group bg-white dark:bg-slate-900 rounded-xl md:rounded-2xl p-4 md:p-5 shadow-card hover:shadow-card-hover border border-slate-100 dark:border-slate-800 transition-all duration-300 relative overflow-hidden">
           <div className="absolute -right-10 -top-10 w-24 h-24 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-colors"></div>
           <div className="flex justify-between items-start mb-2 relative z-10">
-            <span className="text-sm font-medium text-slate-500 dark:text-slate-400">משימות פתוחות</span>
-            <div className="p-1.5 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-900/20">
-              <ListTodo className="w-4 h-4" />
+            <span className="text-xs md:text-sm font-medium text-slate-500 dark:text-slate-400">משימות פתוחות</span>
+            <div className="p-1 md:p-1.5 rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-900/20">
+              <ListTodo className="w-3.5 h-3.5 md:w-4 md:h-4" />
             </div>
           </div>
-          <div className="mb-3 relative z-10">
-            <span className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight font-mono">
+          <div className="mb-2 md:mb-3 relative z-10">
+            <span className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white tracking-tight font-mono">
               {tasks.filter(t => t.status === 'open').length}
             </span>
           </div>
@@ -241,16 +241,16 @@ const RepTasksView: React.FC<{
         </div>
 
         {/* Overdue */}
-        <div className="group bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-card hover:shadow-card-hover border border-slate-100 dark:border-slate-800 transition-all duration-300 relative overflow-hidden">
+        <div className="group bg-white dark:bg-slate-900 rounded-xl md:rounded-2xl p-4 md:p-5 shadow-card hover:shadow-card-hover border border-slate-100 dark:border-slate-800 transition-all duration-300 relative overflow-hidden">
           <div className="absolute -right-10 -top-10 w-24 h-24 bg-rose-500/5 rounded-full blur-2xl group-hover:bg-rose-500/10 transition-colors"></div>
           <div className="flex justify-between items-start mb-2 relative z-10">
-            <span className="text-sm font-medium text-slate-500 dark:text-slate-400">משימות באיחור</span>
-            <div className="p-1.5 rounded-lg bg-rose-50 text-rose-600 dark:bg-rose-900/20">
-              <AlertCircle className="w-4 h-4" />
+            <span className="text-xs md:text-sm font-medium text-slate-500 dark:text-slate-400">משימות באיחור</span>
+            <div className="p-1 md:p-1.5 rounded-lg bg-rose-50 text-rose-600 dark:bg-rose-900/20">
+              <AlertCircle className="w-3.5 h-3.5 md:w-4 md:h-4" />
             </div>
           </div>
-          <div className="mb-3 relative z-10 flex items-end gap-2">
-            <span className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight font-mono">
+          <div className="mb-2 md:mb-3 relative z-10 flex items-end gap-2">
+            <span className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white tracking-tight font-mono">
               {overdueTasks.length}
             </span>
             {overdueTasks.length > 0 && <Badge variant="danger" className="mb-1 text-[10px]">דחוף</Badge>}
@@ -261,18 +261,18 @@ const RepTasksView: React.FC<{
         </div>
 
         {/* Today's Progress */}
-        <div className="group bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-card hover:shadow-card-hover border border-slate-100 dark:border-slate-800 transition-all duration-300 relative overflow-hidden">
+        <div className="group bg-white dark:bg-slate-900 rounded-xl md:rounded-2xl p-4 md:p-5 shadow-card hover:shadow-card-hover border border-slate-100 dark:border-slate-800 transition-all duration-300 relative overflow-hidden">
           <div className="absolute -right-10 -top-10 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-colors"></div>
           <div className="flex justify-between items-start mb-2 relative z-10">
-            <span className="text-sm font-medium text-slate-500 dark:text-slate-400">הושלמו היום</span>
-            <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20">
-              <CheckCircle2 className="w-4 h-4" />
+            <span className="text-xs md:text-sm font-medium text-slate-500 dark:text-slate-400">הושלמו היום</span>
+            <div className="p-1 md:p-1.5 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20">
+              <CheckCircle2 className="w-3.5 h-3.5 md:w-4 md:h-4" />
             </div>
           </div>
-          <div className="mb-3 relative z-10">
+          <div className="mb-2 md:mb-3 relative z-10">
             <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight font-mono">{completedToday}</span>
-              <span className="text-sm text-slate-400 font-medium">/ {todayTasks.length}</span>
+              <span className="text-2xl md:text-3xl font-bold text-slate-900 dark:text-white tracking-tight font-mono">{completedToday}</span>
+              <span className="text-xs md:text-sm text-slate-400 font-medium">/ {todayTasks.length}</span>
             </div>
           </div>
           <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden relative z-10">
@@ -471,7 +471,7 @@ const RepTasksView: React.FC<{
             </div>
           </div>
         </div>
-      </div>
+      </div >
     </>
   );
 };
