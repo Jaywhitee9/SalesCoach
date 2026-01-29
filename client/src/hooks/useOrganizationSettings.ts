@@ -69,5 +69,24 @@ export const useOrganizationSettings = (orgId?: string) => {
         fetchSettings();
     }, [orgId]);
 
-    return { settings, loading, error };
+    const updateSettings = async (newSettings: Partial<OrganizationSettings>) => {
+        if (!orgId) return;
+        try {
+            const { error } = await supabase
+                .from('organization_settings')
+                .update(newSettings)
+                .eq('organization_id', orgId);
+
+            if (error) throw error;
+
+            // Optimistically update local state
+            setSettings(prev => prev ? { ...prev, ...newSettings } : null);
+            return { success: true };
+        } catch (err) {
+            console.error('Error updating settings:', err);
+            return { success: false, error: err };
+        }
+    };
+
+    return { settings, loading, error, updateSettings };
 };

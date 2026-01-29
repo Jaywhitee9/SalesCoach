@@ -32,9 +32,11 @@ import {
   Clock,
   Target,
   Key,
-  BookOpen
+  BookOpen,
+  LayoutTemplate
 } from 'lucide-react';
 import { supabase } from '../../src/lib/supabaseClient';
+import { PipelineSettings } from './PipelineSettings';
 import { CampaignSettings } from './CampaignSettings';
 import { SettingsCalls } from './SettingsCalls';
 import { WebhookSettings } from './WebhookSettings';
@@ -812,6 +814,17 @@ const SettingsOverview = ({ setCategory, stats }: {
           <span className="text-xs font-bold text-brand-600 dark:text-brand-400 flex items-center">הגדרות שיחה <ChevronLeft className="w-3 h-3 mr-1" /></span>
         </div>
 
+        <div onClick={() => setCategory('pipeline')} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 hover:shadow-md transition-all cursor-pointer group hover:border-brand-200 dark:hover:border-brand-800">
+          <div className="w-10 h-10 rounded-lg bg-teal-50 dark:bg-teal-900/20 flex items-center justify-center text-teal-600 dark:text-teal-400 mb-4 group-hover:scale-110 transition-transform duration-300">
+            <LayoutTemplate className="w-5 h-5" />
+          </div>
+          <h3 className="text-base font-bold text-slate-900 dark:text-white mb-2">תהליך מכירה</h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-6 leading-relaxed h-10">
+            התאמת שלבי המכירה, סטטוסים וצבעים בלוח הלידים.
+          </p>
+          <span className="text-xs font-bold text-brand-600 dark:text-brand-400 flex items-center">ערוך סטטוסים <ChevronLeft className="w-3 h-3 mr-1" /></span>
+        </div>
+
         <div onClick={() => setCategory('knowledge')} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 hover:shadow-md transition-all cursor-pointer group hover:border-brand-200 dark:hover:border-brand-800">
           <div className="w-10 h-10 rounded-lg bg-orange-50 dark:bg-orange-900/20 flex items-center justify-center text-orange-600 dark:text-orange-400 mb-4 group-hover:scale-110 transition-transform duration-300">
             <BookOpen className="w-5 h-5" />
@@ -901,6 +914,7 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ isDarkMode
     { id: 'profile', label: 'פרופיל וחשבון', icon: User },
     { id: 'team', label: 'צוות ותפקידים', icon: Users },
     { id: 'calls', label: 'שיחות ואימון', icon: Phone },
+    { id: 'pipeline', label: 'תהליך מכירה', icon: LayoutTemplate },
     { id: 'campaigns', label: 'קמפיינים', icon: Target },
     { id: 'knowledge', label: 'בסיס ידע', icon: BookOpen },
     { id: 'webhooks', label: 'Webhooks', icon: Key },
@@ -926,6 +940,7 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ isDarkMode
       case 'profile': return <SettingsProfile user={user} isDarkMode={isDarkMode} toggleTheme={toggleTheme} />;
       case 'team': return <SettingsTeam members={teamMembers} />;
       case 'calls': return <SettingsCalls user={user} />;
+      case 'pipeline': return <PipelineSettings orgId={user.organization_id} />;
       case 'campaigns': return <CampaignSettings />;
       case 'knowledge': return <KnowledgeBase user={user} />;
       case 'webhooks': return <WebhookSettings />;
@@ -943,6 +958,7 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ isDarkMode
       case 'profile': return { title: 'פרופיל וחשבון', desc: 'נהל את הפרטים האישיים, הגדרות האבטחה וההעדפות שלך.' };
       case 'team': return { title: 'צוות ותפקידים', desc: 'נהל את המשתמשים, הצוותים והרשאות הגישה במערכת.' };
       case 'calls': return { title: 'שיחות ואימון', desc: 'הגדר כיצד המערכת מתמללת, מנתחת ומאמנת את הנציגים בזמן אמת.' };
+      case 'pipeline': return { title: 'תהליך מכירה', desc: 'הגדר את שלבי ה-Pipeline, סטטוסים וצבעים לניהול לידים.' };
       case 'campaigns': return { title: 'קמפיינים', desc: 'נהל קמפיינים וסנן לידים לפי מקור (דף נחיתה, גוגל, ועוד).' };
       case 'knowledge': return { title: 'בסיס ידע', desc: 'הגדר מידע ייחודי לעסק שלך - המאמן ישתמש בזה לאימון חכם ומותאם אישית.' };
       case 'webhooks': return { title: 'Webhooks & API', desc: 'קבל לידים מפייסבוק, דפי נחיתה, גוגל ומקורות חיצוניים.' };
