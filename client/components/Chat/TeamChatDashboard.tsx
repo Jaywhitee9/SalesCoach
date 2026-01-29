@@ -223,7 +223,7 @@ export const TeamChatDashboard: React.FC<TeamChatDashboardProps> = ({ isDarkMode
                   text: m.content,
                   timestamp: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                   isRead: m.is_read,
-                  context: m.context_type ? { type: m.context_type, label: m.context_label || 'Context' } : undefined
+                  context: m.context_type ? { type: m.context_type, id: m.context_id || '', label: m.context_label || 'Context' } : undefined
                }));
                setMessages(uiMessages);
 
@@ -332,8 +332,8 @@ export const TeamChatDashboard: React.FC<TeamChatDashboardProps> = ({ isDarkMode
    return (
       <div className="flex flex-1 h-full bg-slate-50 dark:bg-slate-950 overflow-hidden">
 
-         {/* 1. Left List (RTL visual right) */}
-         <div className="w-80 flex-shrink-0 bg-white dark:bg-slate-900 border-e border-slate-200 dark:border-slate-800 flex flex-col">
+         {/* 1. Left List (RTL visual right) - Hidden on mobile */}
+         <div className="hidden md:flex w-80 flex-shrink-0 bg-white dark:bg-slate-900 border-e border-slate-200 dark:border-slate-800 flex-col">
             {/* Header */}
             <div className="p-4 border-b border-slate-100 dark:border-slate-800">
                <div className="flex items-center justify-between mb-3">
@@ -446,7 +446,7 @@ export const TeamChatDashboard: React.FC<TeamChatDashboardProps> = ({ isDarkMode
             </div>
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4">
                {loading ? (
                   <div className="flex items-center justify-center h-full">
                      <Loader2 className="w-8 h-8 animate-spin text-brand-500" />
@@ -462,7 +462,7 @@ export const TeamChatDashboard: React.FC<TeamChatDashboardProps> = ({ isDarkMode
 
                      return (
                         <div key={idx} className={`flex ${isMe ? 'justify-start' : 'justify-end'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
-                           <div className={`max-w-[70%] flex flex-col ${isMe ? 'items-start' : 'items-end'}`}>
+                           <div className={`max-w-[85%] md:max-w-[70%] flex flex-col ${isMe ? 'items-start' : 'items-end'}`}>
                               <div className={`
                                 px-4 py-3 rounded-2xl text-sm shadow-sm relative leading-relaxed
                                 ${isMe

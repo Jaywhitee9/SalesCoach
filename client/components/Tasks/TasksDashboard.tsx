@@ -220,7 +220,7 @@ const RepTasksView: React.FC<{
   return (
     <>
       {/* 2. KPI Cards - Premium Look */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10 px-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-10 px-4 md:px-6">
         {/* Open Tasks */}
         <div className="group bg-white dark:bg-slate-900 rounded-2xl p-5 shadow-card hover:shadow-card-hover border border-slate-100 dark:border-slate-800 transition-all duration-300 relative overflow-hidden">
           <div className="absolute -right-10 -top-10 w-24 h-24 bg-blue-500/5 rounded-full blur-2xl group-hover:bg-blue-500/10 transition-colors"></div>
@@ -282,14 +282,14 @@ const RepTasksView: React.FC<{
       </div>
 
       {/* 3. Main Content - Split Layout */}
-      <div className="flex-1 overflow-visible lg:overflow-hidden px-6 pb-6 min-h-0">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:h-full">
+      <div className="flex-1 overflow-visible lg:overflow-hidden px-4 md:px-6 pb-4 md:pb-6 min-h-0">
+        <div className="grid grid-cols-1 gap-4 md:gap-8 lg:grid-cols-12 lg:h-full">
 
           {/* RIGHT COLUMN: Task List (8 cols) */}
           <div className="lg:col-span-8 flex flex-col bg-white/50 dark:bg-slate-900/50 rounded-2xl border border-slate-200/60 dark:border-slate-800/60 shadow-sm lg:h-full overflow-hidden backdrop-blur-sm order-2 lg:order-1">
 
             {/* Tabs */}
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 pt-4 pb-0 bg-white dark:bg-slate-900 rounded-t-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-4 md:px-6 pt-4 pb-0 bg-white dark:bg-slate-900 rounded-t-2xl">
               <div className="flex gap-6 overflow-x-auto no-scrollbar">
                 {[
                   { id: 'today', label: 'היום' },
@@ -339,7 +339,7 @@ const RepTasksView: React.FC<{
             </div>
 
             {/* Task List Content */}
-            <div className="flex-1 lg:overflow-y-auto p-6 space-y-8 bg-slate-50/30 dark:bg-slate-950/30">
+            <div className="flex-1 lg:overflow-y-auto p-4 md:p-6 space-y-6 md:space-y-8 bg-slate-50/30 dark:bg-slate-950/30">
 
               {/* Overdue Section */}
               {relevantOverdue.length > 0 && (
@@ -404,7 +404,7 @@ const RepTasksView: React.FC<{
           </div>
 
           {/* LEFT COLUMN: Smart Widgets (4 cols) */}
-          <div className="lg:col-span-4 flex flex-col gap-6 lg:h-full lg:overflow-y-auto pb-4 order-1 lg:order-2">
+          <div className="lg:col-span-4 flex flex-col gap-4 md:gap-6 lg:h-full lg:overflow-y-auto pb-4 order-1 lg:order-2">
 
             {/* Widget 1: Next Best Action - UPDATED DESIGN */}
             <div className="bg-gradient-to-br from-[#1e1b4b] to-[#312e81] rounded-2xl shadow-xl shadow-indigo-900/20 p-6 text-white relative overflow-hidden flex-shrink-0 border border-white/5">

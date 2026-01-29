@@ -233,10 +233,10 @@ export const PanelDashboard: React.FC<PanelDashboardProps> = ({ isDarkMode, onSt
             )}
 
             {/* Main Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
 
                 {/* Left Column - Hot Leads & At Risk */}
-                <div className="lg:col-span-4 space-y-6">
+                <div className="lg:col-span-4 space-y-4 lg:space-y-6">
 
                     {/* Hot Leads */}
                     <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm">
@@ -332,7 +332,7 @@ export const PanelDashboard: React.FC<PanelDashboardProps> = ({ isDarkMode, onSt
 
                 {/* Middle Column - Lead Queue */}
                 <div className="lg:col-span-5">
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm h-full">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 md:p-5 shadow-sm h-full">
                         <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-2">
                                 <Users className="w-5 h-5 text-brand-500" />
@@ -352,7 +352,7 @@ export const PanelDashboard: React.FC<PanelDashboardProps> = ({ isDarkMode, onSt
 
                         {/* Queue Table */}
                         <div className="overflow-x-auto">
-                            <table className="w-full text-right">
+                            <table className="w-full text-right min-w-[500px]">
                                 <thead className="text-xs text-slate-500 uppercase border-b border-slate-100 dark:border-slate-800">
                                     <tr>
                                         <th className="pb-3 font-semibold">שם ליד</th>
@@ -418,7 +418,7 @@ export const PanelDashboard: React.FC<PanelDashboardProps> = ({ isDarkMode, onSt
 
                 {/* Right Column - Performance Chart */}
                 <div className="lg:col-span-3">
-                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 shadow-sm h-full">
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 md:p-5 shadow-sm h-full">
                         <div className="flex items-center gap-2 mb-4">
                             <TrendingUp className="w-5 h-5 text-emerald-500" />
                             <h2 className="font-bold text-slate-900 dark:text-white">הביצועים שלי היום</h2>
@@ -451,8 +451,9 @@ export const PanelDashboard: React.FC<PanelDashboardProps> = ({ isDarkMode, onSt
                                     <YAxis
                                         type="category"
                                         dataKey="name"
-                                        tick={{ fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 10 }}
-                                        width={70}
+                                        tick={{ fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 9 }}
+                                        width={55}
+                                        tickFormatter={(value) => value.length > 8 ? value.slice(0, 6) + '…' : value}
                                     />
                                     <Tooltip
                                         contentStyle={{
