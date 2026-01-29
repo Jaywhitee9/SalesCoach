@@ -389,9 +389,11 @@ export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode
                     </div>
 
                     {/* Value (Left) */}
-                    <div className="w-24 text-left flex items-center justify-end gap-2 text-sm">
-                      <span className="font-bold text-slate-900 dark:text-white tabular-nums">
-                        {sourceMetric === 'revenue' ? `₪${(value / 1000).toFixed(0)}k` : value}
+                    <div className="w-28 text-left flex items-center justify-end gap-2">
+                      <span className="font-bold text-slate-900 dark:text-white tabular-nums text-base">
+                        {sourceMetric === 'revenue'
+                          ? `₪${value.toLocaleString('he-IL')}`
+                          : value}
                       </span>
                     </div>
                   </div>

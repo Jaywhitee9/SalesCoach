@@ -409,16 +409,18 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             </Button>
           </form>
 
-          {/* Sign Up Link */}
-          <p className="mt-8 text-center text-sm text-slate-500 dark:text-slate-400">
-            אין לך חשבון עדיין?{' '}
+          {/* Sign Up Link - More Prominent */}
+          <div className="mt-8 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl border border-slate-200 dark:border-slate-800 text-center">
+            <p className="text-base text-slate-600 dark:text-slate-400 mb-2">
+              אין לך חשבון עדיין?
+            </p>
             <button
               onClick={() => setShowContactForm(true)}
-              className="font-semibold text-brand-600 hover:text-brand-700 dark:text-brand-400 transition-colors"
+              className="text-lg font-bold text-brand-600 hover:text-brand-700 dark:text-brand-400 transition-colors underline decoration-2 underline-offset-4 hover:decoration-brand-400"
             >
-              צור קשר למידע נוסף
+              צור קשר למידע נוסף →
             </button>
-          </p>
+          </div>
 
           {/* Footer - Inside the form container */}
           <div className="mt-10 text-xs text-slate-400 text-center">
