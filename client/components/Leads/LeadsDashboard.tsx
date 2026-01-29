@@ -39,7 +39,7 @@ export type SortConfig = {
 };
 
 export const LeadsDashboard: React.FC<LeadsDashboardProps> = ({ isDarkMode, orgId, user }) => {
-  const { leads, loading, error, refreshLeads, addLead, deleteLead, updateLead, generateAiScore } = useLeads(undefined, orgId);
+  const { leads, loading, error, refreshLeads, addLead, deleteLead, updateLead, generateAiScore } = useLeads(undefined, orgId, user?.id);
   const [viewMode, setViewMode] = useState<'list' | 'kanban'>(() => {
     if (typeof window !== 'undefined') {
       return (localStorage.getItem('leadsViewMode') as 'list' | 'kanban') || 'list';

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { Lead } from '../../types';
 
-export const useLeads = (initialStatus?: string, organizationId?: string) => {
+export const useLeads = (initialStatus?: string, organizationId?: string, userId?: string) => {
     const [leads, setLeads] = useState<Lead[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -25,6 +25,11 @@ export const useLeads = (initialStatus?: string, organizationId?: string) => {
 
             if (organizationId) {
                 query = query.eq('organization_id', organizationId);
+            }
+
+            // Filter by owner - each user only sees their own leads
+            if (userId) {
+                query = query.eq('owner_id', userId);
             }
 
             const { data, error } = await query;
