@@ -11,7 +11,6 @@ export interface OrganizationSettings {
     id: string;
     organization_id: string;
     pipeline_statuses: PipelineStatus[];
-    // Add other settings fields here as needed
 }
 
 export const useOrganizationSettings = (orgId?: string) => {
@@ -21,11 +20,11 @@ export const useOrganizationSettings = (orgId?: string) => {
 
     const defaultStatuses: PipelineStatus[] = [
         { id: 'New', label: 'ליד חדש', color: '#3B82F6' },
-        { id: 'Contacted', label: 'נוצר קשר', color: '#F59E0B' },
-        { id: 'Qualified', label: 'ליד איכותי', color: '#8B5CF6' },
+        { id: 'Discovery', label: 'גילוי צרכים', color: '#8B5CF6' },
         { id: 'Proposal', label: 'הצעת מחיר', color: '#10B981' },
         { id: 'Negotiation', label: 'משא ומתן', color: '#EC4899' },
-        { id: 'Won', label: 'סגירה - זכייה', color: '#059669' },
+        { id: 'Follow Up', label: 'פולואפ', color: '#F59E0B' },
+        { id: 'Closed', label: 'סגור - הצלחה', color: '#059669' },
         { id: 'Lost', label: 'סגירה - הפסד', color: '#EF4444' }
     ];
 
@@ -45,22 +44,26 @@ export const useOrganizationSettings = (orgId?: string) => {
                     .single();
 
                 if (error) {
-                    // If no settings found, implementation might vary (create default or just return null)
-                    console.error('Error fetching org settings:', error);
-                    // Fallback to default if error (or not found)
+                    // Log warning but fallback gracefully
+                    console.warn('Fetching org settings info (using defaults):', error.message);
                     setSettings({
-                        id: 'temp',
+                        id: 'default_fallback',
                         organization_id: orgId,
                         pipeline_statuses: defaultStatuses
                     });
                 } else {
-                    // Ensure pipeline_statuses exists, fallback to default if null
                     const statuses = data.pipeline_statuses || defaultStatuses;
                     setSettings({ ...data, pipeline_statuses: statuses });
                 }
             } catch (err) {
                 console.error('Unexpected error in useOrganizationSettings:', err);
                 setError('Failed to load settings');
+                // Ensure app doesn't crash
+                setSettings({
+                    id: 'error_fallback',
+                    organization_id: orgId,
+                    pipeline_statuses: defaultStatuses
+                });
             } finally {
                 setLoading(false);
             }
@@ -70,21 +73,43 @@ export const useOrganizationSettings = (orgId?: string) => {
     }, [orgId]);
 
     const updateSettings = async (newSettings: Partial<OrganizationSettings>) => {
-        if (!orgId) return;
+        if (!orgId) return { success: false, error: 'Missing Organization ID' };
+
         try {
-            const { error } = await supabase
+            // Check if row exists
+            const { count } = await supabase
                 .from('organization_settings')
-                .update(newSettings)
+                .select('id', { count: 'exact', head: true })
                 .eq('organization_id', orgId);
 
-            if (error) throw error;
+            let result;
+
+            if (count === 0) {
+                // Insert new row if missing
+                result = await supabase
+                    .from('organization_settings')
+                    .insert({
+                        organization_id: orgId,
+                        ...newSettings,
+                        calls_config: {}, // Default empty config
+                        stages_config: []
+                    });
+            } else {
+                // Update existing row
+                result = await supabase
+                    .from('organization_settings')
+                    .update(newSettings)
+                    .eq('organization_id', orgId);
+            }
+
+            if (result.error) throw result.error;
 
             // Optimistically update local state
             setSettings(prev => prev ? { ...prev, ...newSettings } : null);
             return { success: true };
-        } catch (err) {
-            console.error('Error updating settings:', err);
-            return { success: false, error: err };
+        } catch (err: any) {
+            console.error('Error updating settings details:', err);
+            return { success: false, error: err.message || 'Update failed' };
         }
     };
 

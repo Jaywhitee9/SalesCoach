@@ -27,7 +27,7 @@ interface LeadsTableProps {
   onSort: (key: string) => void;
   onUpdateLead?: (id: string, updates: Partial<Lead>) => void;
   onDeleteLead?: (id: string) => void;
-  statuses: Status[];
+  statuses?: Status[];
 }
 
 export const LeadsTable: React.FC<LeadsTableProps> = ({
@@ -40,7 +40,7 @@ export const LeadsTable: React.FC<LeadsTableProps> = ({
   onSort,
   onUpdateLead,
   onDeleteLead,
-  statuses
+  statuses = []
 }) => {
   const [menuOpenId, setMenuOpenId] = React.useState<string | null>(null);
   const allSelected = leads.length > 0 && selectedIds.length === leads.length;
