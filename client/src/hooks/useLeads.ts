@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 import { Lead } from '../../types';
 
-export const useLeads = (initialStatus?: string, organizationId?: string, userId?: string) => {
+export const useLeads = (initialStatus?: string, organizationId?: string, userId?: string, userRole?: string) => {
     const [leads, setLeads] = useState<Lead[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -27,8 +27,9 @@ export const useLeads = (initialStatus?: string, organizationId?: string, userId
                 query = query.eq('organization_id', organizationId);
             }
 
-            // Filter by owner - each user only sees their own leads
-            if (userId) {
+            // Role-based filtering: managers see all leads, reps see only their own
+            const isManager = userRole === 'manager' || userRole === 'sales_manager' || userRole === 'admin' || userRole === 'super_admin' || userRole === 'platform_admin';
+            if (userId && !isManager) {
                 query = query.eq('owner_id', userId);
             }
 
