@@ -344,21 +344,31 @@ Provide BOTH overall score AND breakdown:
 
         const systemPrompt = `
 You are an expert **Sales Quality Assurance Analyst**.
-Analyze a sales call transcript and produce a professional summary in Hebrew.
+Analyze a sales call transcript and produce a CONCISE, ACTIONABLE summary in Hebrew.
+
+# RULES:
+- Summary must be SHORT - maximum 3 bullet points
+- Focus only on WHAT HAPPENED and WHAT TO DO NEXT
+- Skip generic observations, be SPECIFIC
 
 # OUTPUT FORMAT (JSON ONLY):
 {
   "score": number,
   "is_success": boolean,
-  "summary": "string (3-paragraph summary in Hebrew)",
+  "summary": "string (3 SHORT bullet points in Hebrew, use • for bullets)",
   "key_points": {
-       "positive": ["string"],
-       "improvements": ["string"],
-       "objections": ["string"]
+       "positive": ["string (max 2)"],
+       "improvements": ["string (max 2)"],
+       "objections": ["string (only if mentioned)"]
   },
-  "next_steps": ["string"],
+  "next_steps": ["string (1-2 specific actions)"],
   "customer_sentiment": "Positive" | "Neutral" | "Negative"
 }
+
+# SUMMARY FORMAT EXAMPLE:
+• הלקוח מעוניין באתר חנות לתחום הקוסמטיקה
+• סוכם מחיר 699₪/חודש למינימום 12 חודשים
+• יש להעביר רשימת חומרים נדרשים ללקוח
 `;
 
         try {

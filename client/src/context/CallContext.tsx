@@ -533,7 +533,44 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                             }
                         }
 
+                        // === NEW: CLEAN INTERNAL DUPLICATIONS ===
+                        // Detect and remove repeated phrases within the text
+                        const cleanDuplicates = (text: string): string => {
+                            // Look for repeated phrases (15+ chars that appear twice consecutively)
+                            const words = text.split(/\s+/);
+                            const cleaned: string[] = [];
+                            let i = 0;
+
+                            while (i < words.length) {
+                                // Try to find repeated sequences of 3-10 words
+                                let foundDuplicate = false;
+                                for (let seqLen = Math.min(10, Math.floor((words.length - i) / 2)); seqLen >= 3; seqLen--) {
+                                    const seq1 = words.slice(i, i + seqLen).join(' ');
+                                    const seq2 = words.slice(i + seqLen, i + seqLen * 2).join(' ');
+
+                                    if (seq1 === seq2 && seq1.length >= 10) {
+                                        // Found duplicate - add only once and skip the duplicate
+                                        cleaned.push(...words.slice(i, i + seqLen));
+                                        i += seqLen * 2;
+                                        foundDuplicate = true;
+                                        console.log(`[UI-Dedup] Removed duplicate phrase: "${seq1}"`);
+                                        break;
+                                    }
+                                }
+
+                                if (!foundDuplicate) {
+                                    cleaned.push(words[i]);
+                                    i++;
+                                }
+                            }
+
+                            return cleaned.join(' ');
+                        };
+
+                        commitText = cleanDuplicates(commitText);
+
                         console.log(`[UI-Debug] role=${speakerArg} isFinal=true newLen=${data.text.length} draftLen=${currentDraft?.text?.length} commitLen=${commitText.length} text="${commitText.substring(0, 10)}..."`);
+
 
                         setTranscripts(prev => {
                             const lastMsg = prev[prev.length - 1];
