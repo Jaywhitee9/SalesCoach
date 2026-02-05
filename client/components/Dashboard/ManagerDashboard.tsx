@@ -418,26 +418,36 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ isDarkMode, 
         </div>
       </div>
 
-      {/* 1. Top KPIs Row (Team Level) */}
+      {/* 1. Top KPIs Row (Team Level) - Premium Glassmorphism */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {kpis.map((kpi, index) => {
           const Icon = kpi.icon || TrendingUp;
+          const iconTheme = index === 0 ? '' : index === 1 ? 'success' : index === 2 ? 'warning' : 'important';
           return (
-            <div key={index} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-sm relative overflow-hidden">
-              <div className="flex justify-between items-start mb-3">
+            <div
+              key={index}
+              className={`glass-card kpi-card rounded-2xl p-6 cursor-pointer fade-in-card stagger-${index + 1}`}
+            >
+              {/* Header: Icon + Label */}
+              <div className="flex items-center justify-between mb-4">
+                <div className={`kpi-icon ${iconTheme}`}>
+                  <Icon />
+                </div>
                 <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{kpi.label}</span>
-                <Icon className="w-4 h-4 text-slate-300 dark:text-slate-600" />
               </div>
+
+              {/* Value */}
               <div className="flex flex-col">
-                <span className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{kpi.value}</span>
+                <span className="text-4xl font-bold gradient-value mb-2">{kpi.value}</span>
+
+                {/* Target + Trend */}
                 <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500 dark:text-slate-400 font-semibold">יעד: <span className="text-brand-600 dark:text-brand-400">{kpi.subtext?.replace('יעד: ', '')}</span></span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    יעד: <span className="font-semibold text-brand-600 dark:text-brand-400">{kpi.subtext?.replace('יעד: ', '')}</span>
+                  </span>
                   {kpi.trendDirection !== 'neutral' && (
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded flex items-center ${kpi.trendDirection === 'up'
-                      ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 dark:text-emerald-400'
-                      : 'text-rose-600 bg-rose-50 dark:bg-rose-900/20 dark:text-rose-400'
-                      }`}>
-                      {kpi.trendDirection === 'up' ? <ArrowUpRight className="w-2.5 h-2.5 ml-0.5" /> : <ArrowDownRight className="w-2.5 h-2.5 ml-0.5" />}
+                    <span className={`trend-badge ${kpi.trendDirection}`}>
+                      {kpi.trendDirection === 'up' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
                       {kpi.trend}
                     </span>
                   )}
@@ -451,23 +461,25 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ isDarkMode, 
       {/* 2. Middle Analytics Panels */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-8">
 
-        {/* Left: Pipeline & Revenue (Redesigned) */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col overflow-hidden">
+        {/* Left: Pipeline & Revenue (Premium Design) */}
+        <div className="glass-card rounded-2xl flex flex-col overflow-hidden fade-in-card stagger-1">
 
           {/* Card Header */}
-          <div className="px-6 py-5 flex items-center justify-between border-b border-transparent dark:border-slate-800/50">
+          <div className="px-6 py-5 flex items-center justify-between border-b border-slate-100 dark:border-slate-800/50">
             <div className="flex items-center gap-3">
-              <h2 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-brand-500" />
+              <div className="section-header-icon">
+                <BarChart3 />
+              </div>
+              <h2 className="font-bold text-slate-900 dark:text-white">
                 {centerType === 'support' ? 'סטטוס פניות' : 'פייפליין והכנסות'}
               </h2>
-              <span className="text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 px-2 py-0.5 rounded-full">
+              <span className="text-xs font-medium bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 px-2.5 py-1 rounded-full">
                 החודש
               </span>
             </div>
             <button
               onClick={() => onNavigate && onNavigate('pipeline')}
-              className="group flex items-center gap-1 text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 transition-colors"
+              className="group flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 transition-colors bg-brand-50/50 dark:bg-brand-900/10 px-3 py-1.5 rounded-lg hover:bg-brand-100 dark:hover:bg-brand-900/20"
             >
               דוח מלא
               <ChevronLeft className="w-3 h-3 transition-transform group-hover:-translate-x-0.5" />
@@ -616,13 +628,17 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ isDarkMode, 
           </div>
         </div>
 
-        {/* Right: Quality & Coaching (Existing) */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-6 flex flex-col">
+        {/* Right: Quality & Coaching (Premium Design) */}
+        <div className="glass-card rounded-2xl p-6 flex flex-col fade-in-card stagger-2">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-emerald-500" />
-              איכות שיחה ואימון
-            </h2>
+            <div className="flex items-center gap-3">
+              <div className="kpi-icon success">
+                <TrendingUp />
+              </div>
+              <h2 className="font-bold text-slate-900 dark:text-white">
+                איכות שיחה ואימון
+              </h2>
+            </div>
           </div>
 
           {/* Quality Trend Chart - RTL Adjusted */}
@@ -704,12 +720,16 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ isDarkMode, 
 
         {/* Panel A: Team Leaderboard (7 cols) */}
         {/* Keeping mock data here for simplicity unless requested to map */}
-        <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-6 overflow-hidden">
+        <div className="lg:col-span-7 glass-card rounded-2xl p-6 overflow-hidden fade-in-card stagger-1">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Users className="w-4 h-4 text-brand-500" />
-              ביצועי צוות
-            </h2>
+            <div className="flex items-center gap-3">
+              <div className="section-header-icon">
+                <Users />
+              </div>
+              <h2 className="font-bold text-slate-900 dark:text-white">
+                ביצועי צוות
+              </h2>
+            </div>
             <div className="flex bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5">
               <button className="px-3 py-1 text-xs font-medium rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm">מכירות</button>
               <button className="px-3 py-1 text-xs font-medium rounded-md text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-300">פעילות</button>
@@ -784,12 +804,19 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ isDarkMode, 
         </div>
 
         {/* Panel B: Attention Needed (5 cols) */}
-        <div className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-6">
+        <div className="lg:col-span-5 glass-card rounded-2xl p-6 fade-in-card stagger-2">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              דורש תשומת לב
-              <span className="flex h-2 w-2 rounded-full bg-rose-500"></span>
-            </h2>
+            <div className="flex items-center gap-3">
+              <div className="kpi-icon important alert-badge">
+                <AlertTriangle />
+              </div>
+              <h2 className="font-bold text-slate-900 dark:text-white">
+                דורש תשומת לב
+              </h2>
+            </div>
+            <span className="text-xs font-medium bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 px-2.5 py-1 rounded-full">
+              {attentionQueue.length} פתוחים
+            </span>
           </div>
 
           <div className="space-y-3">
