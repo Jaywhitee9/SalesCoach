@@ -1,0 +1,35 @@
+{
+  "name": "sales-coach",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "build": "npm install --production=false && cd client && npm install && npm run build && cd ..",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.71.2",
+    "@fastify/formbody": "^8.0.2",
+    "@fastify/static": "^8.3.0",
+    "@fastify/websocket": "^11.2.0",
+    "@supabase/supabase-js": "^2.87.1",
+    "dotenv": "^17.2.3",
+    "fastify": "^5.6.2",
+    "node-fetch": "^3.3.2",
+    "openai": "^6.10.0",
+    "pg": "^8.16.3",
+    "pino-pretty": "^13.1.3",
+    "twilio": "^5.10.7",
+    "uuid": "^13.0.0",
+    "ws": "^8.18.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

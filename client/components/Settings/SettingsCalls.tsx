@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Activity, Sliders, GripVertical, Plus, Edit2, Trash2, Check, Save, Loader2 } from 'lucide-react';
+import { supabase } from '../../src/lib/supabaseClient';
 import { Button } from '../Common/Button';
 import { User } from '../../types';
 
@@ -39,39 +40,64 @@ export const SettingsCalls: React.FC<SettingsCallsProps> = ({ user }) => {
     const [isEditingStage, setIsEditingStage] = useState<number | null>(null);
     const [stageEditText, setStageEditText] = useState('');
 
+    // Phone Config
+    const [phoneNumber, setPhoneNumber] = useState('');
+
     // Fetch Settings on Mount
     useEffect(() => {
-        // Determine Organization ID (Fallback for dev)
-        const orgId = user.organization_id || 'org1';
+        const fetchSettings = async () => {
+            // Determine Organization ID (Fallback for dev)
+            const orgId = user.organization_id || 'org1';
 
-        fetch(`/api/settings/calls?organizationId=${orgId}`)
-            .then(res => res.json())
-            .then(data => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) return;
+
+            try {
+                const res = await fetch(`/api/settings/calls?organizationId=${orgId}`, {
+                    headers: { 'Authorization': `Bearer ${session.access_token}` }
+                });
+                const data = await res.json();
                 if (data.success && data.settings) {
                     if (data.settings.calls_config) setConfig(data.settings.calls_config);
                     if (data.settings.stages_config) setStages(data.settings.stages_config);
+                    if (data.settings.twilio_phone_number) setPhoneNumber(data.settings.twilio_phone_number);
                 }
-            })
-            .catch(err => console.error('Failed to load settings:', err))
-            .finally(() => setLoading(false));
+            } catch (err) {
+                console.error('Failed to load settings:', err);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (user.organization_id) fetchSettings();
     }, [user.organization_id]);
 
     const handleSave = async () => {
         setSaving(true);
         const orgId = user.organization_id || 'org1';
+        const { data: { session } } = await supabase.auth.getSession();
+
+        if (!session) {
+            setSaving(false);
+            return;
+        }
 
         try {
             const payload = {
                 organizationId: orgId,
                 settings: {
                     calls_config: config,
-                    stages_config: stages
+                    stages_config: stages,
+                    twilio_phone_number: phoneNumber
                 }
             };
 
             const res = await fetch('/api/settings/calls', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${session.access_token}`
+                },
                 body: JSON.stringify(payload)
             });
 
@@ -161,6 +187,30 @@ export const SettingsCalls: React.FC<SettingsCallsProps> = ({ user }) => {
                             <option value="he">עברית (Hebrew)</option>
                             <option value="en">אנגלית (English)</option>
                         </select>
+                    </div>
+                </div>
+            </div>
+
+            {/* General Settings (Phone) */}
+            <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white mb-6 flex items-center gap-2">
+                    <Activity className="w-5 h-5 text-blue-500" /> הגדרות כלליות
+                </h3>
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-xs font-medium text-slate-700 dark:text-slate-300 mb-1.5 block">
+                            מספר טלפון יוצא (Caller ID)
+                        </label>
+                        <input
+                            type="text"
+                            value={phoneNumber}
+                            onChange={(e) => setPhoneNumber(e.target.value)}
+                            placeholder="+972500000000"
+                            className="w-full md:w-64 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm outline-none font-mono"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">
+                            מספר זה יוצג ללקוחות כשיחה יוצאת מהארגון. השאר ריק כדי להשתמש בברירת המחדל של המערכת.
+                        </p>
                     </div>
                 </div>
             </div>

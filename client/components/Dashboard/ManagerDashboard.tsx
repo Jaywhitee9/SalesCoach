@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowUpRight,
@@ -207,10 +207,35 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ isDarkMode, 
     fetchData();
   }, [orgId, dateRange, selectedTeam]);
 
-  // Delay chart mounting to ensure container has dimensions
+  const chartContainerRef = useRef<HTMLDivElement>(null);
+
+  // Use ResizeObserver to reliably detect when container has dimensions
   useEffect(() => {
-    const timer = setTimeout(() => setChartMounted(true), 100);
-    return () => clearTimeout(timer);
+    const container = chartContainerRef.current;
+    if (!container) {
+      // Fallback if ref not attached
+      const timer = setTimeout(() => setChartMounted(true), 500);
+      return () => clearTimeout(timer);
+    }
+
+    // If already has dimensions, mount immediately
+    if (container.clientWidth > 0 && container.clientHeight > 0) {
+      setChartMounted(true);
+      return;
+    }
+
+    // Use ResizeObserver to wait for valid dimensions
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          setChartMounted(true);
+          observer.disconnect();
+        }
+      }
+    });
+    observer.observe(container);
+
+    return () => observer.disconnect();
   }, []);
 
   // Helper for monochromatic bar colors (Indigo scale)
@@ -601,9 +626,9 @@ export const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ isDarkMode, 
           </div>
 
           {/* Quality Trend Chart - RTL Adjusted */}
-          <div className="w-full mb-6 relative block" style={{ height: '256px', minHeight: '256px' }}>
+          <div ref={chartContainerRef} className="w-full mb-6 relative block" style={{ height: '256px', minHeight: '256px' }}>
             {chartMounted && qualityTrend.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                 <AreaChart data={qualityTrend} margin={{ left: 0, right: 10, top: 5, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">

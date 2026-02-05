@@ -49,10 +49,17 @@ export const CampaignSettings: React.FC = () => {
 
         const fetchData = async () => {
             setLoading(true);
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) {
+                setLoading(false);
+                return;
+            }
+
             try {
+                const headers = { 'Authorization': `Bearer ${session.access_token}` };
                 const [campaignsRes, sourcesRes] = await Promise.all([
-                    fetch(`/api/campaigns?organizationId=${organizationId}`),
-                    fetch(`/api/leads/sources?organizationId=${organizationId}`)
+                    fetch(`/api/campaigns?organizationId=${organizationId}`, { headers }),
+                    fetch(`/api/leads/sources?organizationId=${organizationId}`, { headers })
                 ]);
 
                 const campaignsData = await campaignsRes.json();
@@ -89,13 +96,23 @@ export const CampaignSettings: React.FC = () => {
     const handleSave = async () => {
         if (!organizationId || !formName || !formSource) return;
         setIsSaving(true);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+            setIsSaving(false);
+            return;
+        }
 
         try {
+            const headers = {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`
+            };
+
             if (editingCampaign) {
                 // Update
                 const res = await fetch(`/api/campaigns/${editingCampaign.id}`, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers,
                     body: JSON.stringify({ name: formName, sourceFilter: formSource, description: formDescription })
                 });
                 const data = await res.json();
@@ -106,7 +123,7 @@ export const CampaignSettings: React.FC = () => {
                 // Create
                 const res = await fetch('/api/campaigns', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers,
                     body: JSON.stringify({ organizationId, name: formName, sourceFilter: formSource, description: formDescription })
                 });
                 const data = await res.json();
@@ -124,9 +141,14 @@ export const CampaignSettings: React.FC = () => {
 
     const handleDelete = async (id: string) => {
         if (!confirm('האם למחוק קמפיין זה?')) return;
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
 
         try {
-            const res = await fetch(`/api/campaigns/${id}`, { method: 'DELETE' });
+            const res = await fetch(`/api/campaigns/${id}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${session.access_token}` }
+            });
             const data = await res.json();
             if (data.success) {
                 setCampaigns(prev => prev.filter(c => c.id !== id));

@@ -20,17 +20,17 @@ async function registerTwilioRoutes(fastify) {
         console.log('------------------------------------------');
 
         // Extract Standard Twilio Params + Custom Params (from device.connect)
-        const { To, CallSid, agent_id, lead_id, target_number } = request.body || request.query;
+        const { To, From, CallSid, agent_id, lead_id, target_number } = request.body || request.query;
 
-        console.log('[Twilio] Incoming Voice Request:', { CallSid, To, agent_id, lead_id });
+        console.log('[Twilio] Incoming Voice Request:', { CallSid, To, From, agent_id, lead_id });
 
         // -- ACTION: Create Call Record in DB --
         if (CallSid && agent_id && lead_id && agent_id !== 'unknown') {
             try {
-                // PHASE 3: Fetch organization_id from agent's profile
+                // PHASE 3: Fetch organization_id and profile phone number (and rotator config)
                 const { data: profile, error: profileError } = await supabase
                     .from('profiles')
-                    .select('organization_id')
+                    .select('organization_id, twilio_phone_number, phone_rotator_config')
                     .eq('id', agent_id)
                     .single();
 
@@ -44,17 +44,61 @@ async function registerTwilioRoutes(fastify) {
                     throw new Error(`Missing organization_id for agent ${agent_id}`);
                 }
 
+                // Determine Caller ID Strategy:
+                // 1. Agent Private Line (profiles.twilio_phone_number)
+                // 2. Organization Business Line (organization_settings.twilio_phone_number)
+                // 3. System Fallback (env.TWILIO_PHONE_NUMBER)
+
+                let callerIdToUse = process.env.TWILIO_PHONE_NUMBER;
+
+                // 1. Check Phone Rotator (Advanced Logic)
+                const rotator = profile.phone_rotator_config;
+                if (rotator && rotator.numbers && rotator.numbers.length > 0) {
+                    const activeIndex = rotator.active_index || 0;
+                    if (rotator.numbers[activeIndex]) {
+                        callerIdToUse = rotator.numbers[activeIndex].number;
+                        console.log(`[Twilio] Using Rotator Line [${activeIndex}]: ${callerIdToUse}`);
+                    }
+                }
+                // 2. Check Legacy Agent Private Line
+                else if (profile.twilio_phone_number) {
+                    callerIdToUse = profile.twilio_phone_number;
+                    console.log(`[Twilio] Using Agent Private Line: ${callerIdToUse}`);
+                }
+                // 3. Check Organization Business Line
+                else {
+                    const { data: orgSettings } = await supabase
+                        .from('organization_settings')
+                        .select('twilio_phone_number')
+                        .eq('organization_id', profile.organization_id)
+                        .single();
+
+                    if (orgSettings?.twilio_phone_number) {
+                        callerIdToUse = orgSettings.twilio_phone_number;
+                        console.log(`[Twilio] Using Org Business Line: ${callerIdToUse}`);
+                    }
+                }
+
+                // Store determined callerId in call record for transparency
+                // (Note: we might need to add 'from_number' column to calls table later, for now just logging)
+
                 const { error } = await supabase.from('calls').insert({
                     id: uuidv4(),
                     agent_id: agent_id,
                     lead_id: lead_id,
                     organization_id: profile.organization_id,
-                    org_id: profile.organization_id, // Fix: Map to org_id as expected by DB
+                    org_id: profile.organization_id,
                     status: 'in-progress',
                     direction: 'outbound',
-                    recording_url: `sid:${CallSid}`, // Temp storage for retrieval
-                    created_at: new Date().toISOString()
+                    recording_url: `sid:${CallSid}`,
+                    created_at: new Date().toISOString(),
+                    // We can reuse 'recording_url' field or similar to store meta-data if needed, 
+                    // but for now relying on logs is fine.
                 });
+
+                // Pass callerId to the dial logic scope (via request context or variable)
+                request.activeCallerId = callerIdToUse;
+
                 if (error) console.error('[DB] Failed to insert call:', error.message);
                 else console.log('[DB] Call record created:', CallSid, 'org:', profile.organization_id);
             } catch (err) {
@@ -115,21 +159,70 @@ async function registerTwilioRoutes(fastify) {
                 }
             }
 
-            if (targetNumber && targetNumber !== process.env.TWILIO_PHONE_NUMBER) {
+            if (targetNumber && targetNumber !== (request.activeCallerId || process.env.TWILIO_PHONE_NUMBER)) {
                 // Outbound or forwarding - Enable recording with callback
                 const dial = response.dial({
-                    callerId: process.env.TWILIO_PHONE_NUMBER,
+                    callerId: request.activeCallerId || process.env.TWILIO_PHONE_NUMBER,
                     answerOnBridge: true,
                     record: 'record-from-answer-dual',
+                    // SPAM DETECTION: Track call outcome
+                    action: `${baseUrl}/voice/status-callback?agentId=${agent_id}`,
+                    method: 'POST',
                     recordingStatusCallback: `${process.env.RENDER_EXTERNAL_URL || 'https://sales-coach.onrender.com'}/recording-callback`,
                     recordingStatusCallbackEvent: 'completed'
                 });
                 dial.number(targetNumber);
             } else {
-                // Inbound to system
-                response.say('. אנא המתינו לנציג.');
-                // In a real app we might put them in a queue or just keep the stream open
-                response.pause({ length: 10 });
+                // --- INBOUND CALL LOGIC (Smart Routing) ---
+                console.log(`[Twilio] Inbound call from ${From || 'Unknown'}`);
+
+                let routed = false;
+
+                if (From) {
+                    try {
+                        // 1. Lookup Lead by Phone Number
+                        // Clean the incoming number for matching (flexible)
+                        // Assume DB stores normalized or we try fuzzy match. For now, exact match or partial.
+                        // Twilio sends E.164 (+972...). DB might have 050...
+
+                        // We will try exact match first
+                        let { data: lead, error } = await supabase
+                            .from('leads')
+                            .select('id, owner_id, name, organization_id')
+                            .or(`phone.eq.${From},phone.eq.${From.replace('+972', '0')}`)
+                            .single();
+
+                        if (lead && lead.owner_id) {
+                            console.log(`[Twilio] Smart Routing: Found lead ${lead.name}, routing to agent ${lead.owner_id}`);
+
+                            // 2. Announce to Caller
+                            response.say({ language: 'he-IL', voice: 'alice' }, 'שלום, אנא המתינו ותועברו לנציג האישי שלכם.');
+
+                            // 3. Dial Agent Client
+                            const dial = response.dial({
+                                timeout: 20,
+                                callerId: From
+                            });
+
+                            // Determine Client Identity (Agent ID)
+                            dial.client({
+                                statusCallbackEvent: 'initiated ringing answered completed',
+                                statusCallback: `${baseUrl}/client-status-callback`, // Optional
+                            }, lead.owner_id);
+
+                            routed = true;
+                        }
+                    } catch (err) {
+                        console.error('[Twilio] Routing Lookup Error:', err.message);
+                    }
+                }
+
+                if (!routed) {
+                    // Fallback: No lead found or no owner
+                    console.log('[Twilio] No specific agent found, playing default greeting.');
+                    response.say({ language: 'he-IL', voice: 'alice' }, 'שלום, הגעתם למוקד המכירות. כל הנציגים עסוקים כעת, אנא נסו שוב מאוחר יותר.');
+                    // Optional: Dial a "General Queue" or default admin if we had one
+                }
             }
 
             console.log('[Twilio] Generated TwiML:', response.toString());
@@ -392,6 +485,85 @@ async function registerTwilioRoutes(fastify) {
             console.warn(`[Handler] Error processing transcript for ${callSid}:`, err.message);
         }
     };
+
+    // --- SPAM DETECTION & ROTATION LOGIC ---
+
+    // Callback from <Dial> action
+    fastify.post('/voice/status-callback', async (request, reply) => {
+        const { agentId } = request.query;
+        const { DialCallStatus, DialCallDuration } = request.body;
+
+        console.log(`[Twilio] Call Status Callback for Agent ${agentId}: Status=${DialCallStatus}, Duration=${DialCallDuration}`);
+
+        if (!agentId) return reply.send();
+
+        try {
+            // Fetch current config
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('phone_rotator_config')
+                .eq('id', agentId)
+                .single();
+
+            if (!profile || !profile.phone_rotator_config || !profile.phone_rotator_config.auto_rotate) {
+                return reply.send();
+            }
+
+            let config = profile.phone_rotator_config;
+            const currentNumberIdx = config.active_index || 0;
+
+            // Ensure numbers array structure integrity
+            if (!config.numbers) config.numbers = [];
+            if (!config.numbers[currentNumberIdx]) return reply.send();
+
+            // LOGIC: Did the call succeed?
+            // Success = 'completed' AND duration > 5 seconds (meaning actual talk time, not just voicemail usually)
+            // Or just 'completed' is enough signal for "connected".
+            // Failures = 'busy', 'no-answer', 'failed', 'canceled'
+
+            const isSuccess = DialCallStatus === 'completed'; // Simple check
+
+            if (isSuccess) {
+                // RESET FAILURES
+                config.numbers[currentNumberIdx].consecutive_failures = 0;
+                config.numbers[currentNumberIdx].last_used = new Date().toISOString();
+
+                // Update DB
+                await supabase.from('profiles').update({ phone_rotator_config: config }).eq('id', agentId);
+                console.log(`[SpamLogic] Call Success. Reset failures for ${config.numbers[currentNumberIdx].number}`);
+            } else {
+                // INCREMENT FAILURES
+                const failures = (config.numbers[currentNumberIdx].consecutive_failures || 0) + 1;
+                config.numbers[currentNumberIdx].consecutive_failures = failures;
+                console.log(`[SpamLogic] Call Failed (${DialCallStatus}). Failures: ${failures}`);
+
+                // CHECK THRESHOLD (e.g., 10)
+                if (failures >= 10) {
+                    // ROTATE!
+                    const nextIndex = (currentNumberIdx + 1) % config.numbers.length;
+                    config.active_index = nextIndex;
+                    config.numbers[currentNumberIdx].consecutive_failures = 0; // Reset old one? Or keep as flagged? Let's reset to give it a chance later or manual review.
+
+                    console.warn(`[SpamLogic] 🚨 THRESHOLD HIT! Rotating from ${config.numbers[currentNumberIdx].number} to ${config.numbers[nextIndex].number}`);
+
+                    // Notify Agent (WebSocket)
+                    CallManager.broadcastToAgent(agentId, {
+                        type: 'system_alert',
+                        level: 'warning',
+                        message: `System detected connectivity issues. Auto-switching to line ${config.numbers[nextIndex].number}.`
+                    });
+                }
+
+                // Update DB
+                await supabase.from('profiles').update({ phone_rotator_config: config }).eq('id', agentId);
+            }
+
+        } catch (err) {
+            console.error('[SpamLogic] Error processing callback:', err);
+        }
+
+        return reply.type('text/xml').send('<Response></Response>');
+    });
 
     // Recording Status Callback - Receives actual Twilio recording URL
     fastify.post('/recording-callback', async (request, reply) => {

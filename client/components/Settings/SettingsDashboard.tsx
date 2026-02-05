@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   User,
   Users,
@@ -33,7 +33,8 @@ import {
   Target,
   Key,
   BookOpen,
-  LayoutTemplate
+  LayoutTemplate,
+  X
 } from 'lucide-react';
 import { supabase } from '../../src/lib/supabaseClient';
 import { PipelineSettings } from './PipelineSettings';
@@ -230,9 +231,155 @@ const SettingsProfile = ({ user, isDarkMode, toggleTheme }: { user: UserType; is
   );
 };
 
+// --- PHONE MANAGEMENT MODAL ---
+const UserPhoneModal = ({ userId, userName, onClose }: { userId: string, userName: string, onClose: () => void }) => {
+  const [config, setConfig] = useState({ numbers: [], active_index: 0, auto_rotate: true });
+  const [loading, setLoading] = useState(true);
+  const [newNumber, setNewNumber] = useState('');
+
+  // Fetch Config
+  useEffect(() => {
+    const fetchConfig = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      try {
+        const res = await fetch(`/api/users/phone-config?userId=${userId}&organizationId=current`, {
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`
+          }
+        });
+        const data = await res.json();
+        if (data.success && data.config) {
+          setConfig(data.config);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchConfig();
+  }, [userId]);
+
+  const handleSave = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      await fetch('/api/users/phone-config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ userId, organizationId: 'current', config })
+      });
+      onClose();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const addNumber = () => {
+    if (!newNumber) return;
+    const updated = { ...config, numbers: [...(config.numbers || []), { number: newNumber, label: 'Secondary', consecutive_failures: 0 }] };
+    setConfig(updated);
+    setNewNumber('');
+  };
+
+  const removeNumber = (idx: number) => {
+    const updated = { ...config, numbers: config.numbers.filter((_, i) => i !== idx) };
+    setConfig(updated);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md p-6 border border-slate-200 dark:border-slate-800">
+        <h3 className="text-lg font-bold text-slate-900 dark:text-white mb-1">ניהול מספרים - {userName}</h3>
+        <p className="text-sm text-slate-500 mb-6">הגדר מספרים חלופיים וניהול ספאם.</p>
+
+        {loading ? (
+          <div className="py-8 text-center text-slate-500">טוען נתונים...</div>
+        ) : (
+          <div className="space-y-6">
+
+            {/* Auto Rotate Toggle */}
+            <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-800 p-3 rounded-lg">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${config.auto_rotate ? 'bg-brand-100 text-brand-600' : 'bg-slate-200 text-slate-500'}`}>
+                  <Activity className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">Anti-Spam Protection</p>
+                  <p className="text-xs text-slate-500">החלף מספר אוטומטית אם מזוהה כספאם</p>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" className="sr-only peer" checked={config.auto_rotate} onChange={e => setConfig({ ...config, auto_rotate: e.target.checked })} />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-brand-300 dark:peer-focus:ring-brand-800 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-brand-600"></div>
+              </label>
+            </div>
+
+            {/* Numbers List */}
+            <div className="space-y-3">
+              <label className="text-xs font-bold text-slate-500 uppercase">מספרים משויכים</label>
+
+              {(!config.numbers || config.numbers.length === 0) && (
+                <p className="text-sm text-slate-400 italic">לא הוגדרו מספרים פרטיים (משתמש במספר הארגון)</p>
+              )}
+
+              {config.numbers?.map((n: any, idx: number) => (
+                <div key={idx} className={`flex items-center justify-between p-3 rounded-lg border ${idx === config.active_index ? 'border-brand-500 bg-brand-50 dark:bg-brand-900/20' : 'border-slate-200 dark:border-slate-800'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className="text-xs font-bold w-6 h-6 flex items-center justify-center bg-white dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700">
+                      {idx + 1}
+                    </div>
+                    <div>
+                      <p className="text-sm font-mono font-medium text-slate-900 dark:text-white">{n.number}</p>
+                      {n.consecutive_failures > 0 && <span className="text-[10px] text-rose-500">({n.consecutive_failures} כישלונות)</span>}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => setConfig({ ...config, active_index: idx })} title="קבע כפעיל" className={`p-1.5 rounded hover:bg-white dark:hover:bg-slate-800 ${idx === config.active_index ? 'text-brand-600' : 'text-slate-400 hover:text-brand-600'}`}>
+                      <User className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => removeNumber(idx)} className="p-1.5 rounded hover:bg-white dark:hover:bg-slate-800 text-slate-400 hover:text-rose-500">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {/* Add New */}
+              <div className="flex gap-2 mt-2">
+                <input
+                  type="text"
+                  placeholder="+972..."
+                  value={newNumber}
+                  onChange={e => setNewNumber(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm outline-none"
+                />
+                <Button onClick={addNumber} disabled={!newNumber} variant="secondary" size="sm">הוסף</Button>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        <div className="flex justify-end gap-3 mt-8">
+          <Button variant="ghost" onClick={onClose}>ביטול</Button>
+          <Button onClick={handleSave} disabled={loading}>שמור שינויים</Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // 2. Team & Roles
 const SettingsTeam = ({ members }: { members: TeamMember[] }) => {
   const [activeTab, setActiveTab] = useState<'users' | 'roles'>('users');
+  const [editingPhoneUser, setEditingPhoneUser] = useState<{ id: string, name: string } | null>(null);
 
   // Use real members if available, otherwise mock
   const displayMembers = members.length > 0 ? members : [
@@ -329,6 +476,12 @@ const SettingsTeam = ({ members }: { members: TeamMember[] }) => {
                     <button className="text-slate-400 hover:text-brand-600 p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors opacity-0 group-hover:opacity-100">
                       <MoreVertical className="w-4 h-4" />
                     </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setEditingPhoneUser({ id: u.id, name: u.name }); }}
+                      title="ניהול מספרים"
+                      className="text-slate-400 hover:text-emerald-600 p-1.5 rounded-lg hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors opacity-0 group-hover:opacity-100 mx-1">
+                      <Phone className="w-4 h-4" />
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -362,6 +515,14 @@ const SettingsTeam = ({ members }: { members: TeamMember[] }) => {
             </div>
           ))}
         </div>
+      )}
+
+      {editingPhoneUser && (
+        <UserPhoneModal
+          userId={editingPhoneUser.id}
+          userName={editingPhoneUser.name}
+          onClose={() => setEditingPhoneUser(null)}
+        />
       )}
     </div>
   );

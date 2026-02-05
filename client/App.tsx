@@ -164,10 +164,21 @@ function SalesFlowApp() {
   }, []);
 
   // --- TWILIO DEVICE ---
+  // Defer initialization until first user interaction to avoid AudioContext warning
   useEffect(() => {
-    // Initialize Twilio device when authenticated
     if (isAuthenticated && !isReady) {
-      initDevice();
+      const handleUserInteraction = () => {
+        initDevice();
+        // Remove listeners after first interaction
+        document.removeEventListener('click', handleUserInteraction);
+        document.removeEventListener('keydown', handleUserInteraction);
+      };
+      document.addEventListener('click', handleUserInteraction, { once: true });
+      document.addEventListener('keydown', handleUserInteraction, { once: true });
+      return () => {
+        document.removeEventListener('click', handleUserInteraction);
+        document.removeEventListener('keydown', handleUserInteraction);
+      };
     }
   }, [isAuthenticated, isReady]);
 

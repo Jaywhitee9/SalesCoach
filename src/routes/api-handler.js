@@ -372,7 +372,7 @@ async function registerApiRoutes(fastify) {
 
         if (['super_admin', 'platform_admin'].includes(userRole)) return true; // Super Admin can access all
 
-        if (profile?.organization_id !== targetOrgId) {
+        if (targetOrgId !== 'current' && profile?.organization_id !== targetOrgId) {
             console.log('[Auth Debug] Mismatch! Forbidden.');
             reply.code(403).send({
                 error: 'Forbidden: Organization Mismatch',
@@ -406,6 +406,55 @@ async function registerApiRoutes(fastify) {
         } catch (err) {
             console.error('[API] Error fetching panel stats:', err.message);
             return reply.code(500).send({ error: 'Failed to fetch panel stats' });
+        }
+    });
+
+    // --- NEW MANAGER DASHBOARD ENDPOINTS ---
+
+    // 1. Live Floor (Real-time Status)
+    fastify.get('/api/analytics/live-floor', async (request, reply) => {
+        try {
+            const organizationId = request.query.organizationId;
+            if (!organizationId) return reply.code(400).send({ error: 'Missing organizationId' });
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
+
+            const agents = await DBService.getLiveFloor(organizationId);
+            return { success: true, agents };
+        } catch (err) {
+            console.error('[API] Live Floor Error:', err.message);
+            return reply.code(500).send({ error: 'Failed' });
+        }
+    });
+
+    // 2. Team Performance (Aggregated)
+    fastify.get('/api/analytics/team-performance', async (request, reply) => {
+        try {
+            const organizationId = request.query.organizationId;
+            if (!organizationId) return reply.code(400).send({ error: 'Missing organizationId' });
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
+
+            const range = request.query.range || 'month';
+            const performance = await DBService.getTeamPerformance(organizationId, range);
+            return { success: true, performance };
+        } catch (err) {
+            console.error('[API] Team Performance Error:', err.message);
+            return reply.code(500).send({ error: 'Failed' });
+        }
+    });
+
+    // 3. Calls for Review (Low Scores)
+    fastify.get('/api/analytics/calls-for-review', async (request, reply) => {
+        try {
+            const organizationId = request.query.organizationId;
+            if (!organizationId) return reply.code(400).send({ error: 'Missing organizationId' });
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
+
+            const limit = parseInt(request.query.limit) || 5;
+            const calls = await DBService.getCallsForReview(organizationId, limit);
+            return { success: true, calls };
+        } catch (err) {
+            console.error('[API] Calls Review Error:', err.message);
+            return reply.code(500).send({ error: 'Failed' });
         }
     });
 
@@ -561,6 +610,7 @@ async function registerApiRoutes(fastify) {
             if (!organizationId) {
                 return reply.code(400).send({ success: false, error: 'Missing organizationId' });
             }
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
             const teamMembers = await DBService.getTeamMembers(organizationId);
             console.log('[API] Get Team Result - count:', teamMembers?.length, 'members:', teamMembers?.map(m => m.full_name));
             return { success: true, teamMembers };
@@ -589,6 +639,7 @@ async function registerApiRoutes(fastify) {
             if (!organizationId) {
                 return reply.code(400).send({ success: false, error: 'Missing organizationId' });
             }
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
             const campaigns = await DBService.getCampaigns(organizationId);
             return { success: true, campaigns };
         } catch (err) {
@@ -604,6 +655,7 @@ async function registerApiRoutes(fastify) {
             if (!organizationId || !name || !sourceFilter) {
                 return reply.code(400).send({ success: false, error: 'Missing required fields: organizationId, name, sourceFilter' });
             }
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
             const campaign = await DBService.createCampaign({ organizationId, name, sourceFilter, description });
             return { success: true, campaign };
         } catch (err) {
@@ -644,6 +696,7 @@ async function registerApiRoutes(fastify) {
             if (!organizationId) {
                 return reply.code(400).send({ success: false, error: 'Missing organizationId' });
             }
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
             const sources = await DBService.getLeadSources(organizationId);
             return { success: true, sources };
         } catch (err) {
@@ -661,6 +714,7 @@ async function registerApiRoutes(fastify) {
             if (!organizationId) {
                 return reply.code(400).send({ success: false, error: 'Missing organizationId' });
             }
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
             const keys = await DBService.getApiKeys(organizationId);
             return { success: true, keys };
         } catch (err) {
@@ -676,6 +730,7 @@ async function registerApiRoutes(fastify) {
             if (!organizationId) {
                 return reply.code(400).send({ success: false, error: 'Missing organizationId' });
             }
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
             const key = await DBService.createApiKey(organizationId, name, userId);
             return { success: true, key };
         } catch (err) {
@@ -692,6 +747,7 @@ async function registerApiRoutes(fastify) {
             if (!organizationId) {
                 return reply.code(400).send({ success: false, error: 'Missing organizationId' });
             }
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
             await DBService.revokeApiKey(keyId, organizationId);
             return { success: true };
         } catch (err) {
@@ -706,6 +762,7 @@ async function registerApiRoutes(fastify) {
         try {
             const { organizationId } = request.query;
             if (!organizationId) return reply.code(400).send({ success: false, error: 'Missing organizationId' });
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
 
             const settings = await DBService.getOrganizationSettings(organizationId);
             return { success: true, settings };
@@ -719,11 +776,43 @@ async function registerApiRoutes(fastify) {
         try {
             const { organizationId, settings } = request.body;
             if (!organizationId || !settings) return reply.code(400).send({ success: false, error: 'Missing parameters' });
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
 
             const updated = await DBService.updateOrganizationSettings(organizationId, settings);
             return { success: true, settings: updated };
         } catch (err) {
             console.error('[API] Update Settings Error:', err.message);
+            return reply.code(500).send({ success: false, error: 'Failed' });
+        }
+    });
+
+
+    // --- USER PHONE CONFIG (Advanced Rotator) ---
+
+    fastify.get('/api/users/phone-config', async (request, reply) => {
+        try {
+            const { userId, organizationId } = request.query;
+            if (!userId || !organizationId) return reply.code(400).send({ success: false, error: 'Missing userId or organizationId' });
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
+
+            const config = await DBService.getUserPhoneConfig(userId);
+            return { success: true, config };
+        } catch (err) {
+            console.error('[API] Get Phone Config Error:', err.message);
+            return reply.code(500).send({ success: false, error: 'Failed' });
+        }
+    });
+
+    fastify.post('/api/users/phone-config', async (request, reply) => {
+        try {
+            const { userId, organizationId, config } = request.body;
+            if (!userId || !organizationId || !config) return reply.code(400).send({ success: false, error: 'Missing parameters' });
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
+
+            const success = await DBService.updateUserPhoneConfig(userId, config);
+            return { success };
+        } catch (err) {
+            console.error('[API] Update Phone Config Error:', err.message);
             return reply.code(500).send({ success: false, error: 'Failed' });
         }
     });
@@ -738,6 +827,7 @@ async function registerApiRoutes(fastify) {
             if (!organizationId) {
                 return reply.code(400).send({ success: false, error: 'Missing organizationId' });
             }
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
             const { data, error } = await require('../services/supabase').supabaseAdmin
                 .from('leads')
                 .select('*, profiles!leads_assigned_to_fkey(full_name)')
@@ -761,6 +851,7 @@ async function registerApiRoutes(fastify) {
             if (!organizationId) {
                 return reply.code(400).send({ success: false, error: 'Missing organizationId' });
             }
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
 
             let query = require('../services/supabase').supabaseAdmin
                 .from('leads')
@@ -799,16 +890,41 @@ async function registerApiRoutes(fastify) {
             if (!organizationId) {
                 return reply.code(400).send({ success: false, error: 'Missing organizationId' });
             }
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
 
             const { supabase: supabaseAdmin } = require('../services/supabase');
 
-            // Get lead and campaign settings
-            const { data: lead, error: leadError } = await supabaseAdmin
-                .from('leads')
-                .select('*, campaigns(max_attempts, retry_interval_minutes, retry_on_no_answer)')
-                .eq('id', leadId)
-                .eq('organization_id', organizationId)
-                .single();
+            let lead;
+            let leadError;
+
+            // Try fetching with campaigns relation
+            try {
+                const result = await supabaseAdmin
+                    .from('leads')
+                    .select('*, campaigns(max_attempts, retry_interval_minutes, retry_on_no_answer)')
+                    .eq('id', leadId)
+                    .eq('organization_id', organizationId)
+                    .single();
+
+                lead = result.data;
+                leadError = result.error;
+
+                // Fallback if relation fails (e.g. schema cache not refreshed)
+                if (leadError && leadError.message && leadError.message.includes('relation')) {
+                    console.warn('[API] Campaigns relation missing, fetching lead only.');
+                    const resultFallback = await supabaseAdmin
+                        .from('leads')
+                        .select('*')
+                        .eq('id', leadId)
+                        .eq('organization_id', organizationId)
+                        .single();
+                    lead = resultFallback.data;
+                    leadError = resultFallback.error;
+                }
+            } catch (e) {
+                console.error('[API] Select Error:', e.message);
+                leadError = e;
+            }
 
             if (leadError) throw leadError;
             if (!lead) {
@@ -819,6 +935,8 @@ async function registerApiRoutes(fastify) {
             const retryInterval = lead.campaigns?.retry_interval_minutes || 30;
             const retryOnNoAnswer = lead.campaigns?.retry_on_no_answer ?? true;
             const currentAttempts = (lead.attempt_count || 0) + 1;
+
+            // ... (rest of logic) ...
 
             let nextRetryAt = null;
             let newStatus = lead.status;
@@ -855,7 +973,7 @@ async function registerApiRoutes(fastify) {
             };
         } catch (err) {
             console.error('[API] Record Attempt Error:', err.message);
-            return reply.code(500).send({ success: false, error: 'Failed to record attempt' });
+            return reply.code(500).send({ success: false, error: 'Failed to record attempt: ' + err.message });
         }
     });
 

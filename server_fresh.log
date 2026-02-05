@@ -1,0 +1,154 @@
+[dotenv@17.2.3] injecting env (15) from .env -- tip: 📡 add observability to secrets: https://dotenvx.com/ops
+{"level":30,"time":1770194112833,"pid":18589,"hostname":"unknow","msg":"Server listening at http://127.0.0.1:5050"}
+Server listening on 5050
+{"level":30,"time":1770194112833,"pid":18589,"hostname":"unknow","msg":"Server listening at http://10.0.0.3:5050"}
+{"level":30,"time":1770205603450,"pid":18589,"hostname":"unknow","reqId":"req-1","req":{"method":"GET","url":"/api/calls/lead/882644b4-271a-4048-b558-8cd428f47b13","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61053},"msg":"incoming request"}
+{"level":30,"time":1770205603885,"pid":18589,"hostname":"unknow","reqId":"req-1","res":{"statusCode":401},"responseTime":434.6110830307007,"msg":"request completed"}
+{"level":30,"time":1770205603888,"pid":18589,"hostname":"unknow","reqId":"req-2","req":{"method":"GET","url":"/api/calls/lead/882644b4-271a-4048-b558-8cd428f47b13","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61055},"msg":"incoming request"}
+{"level":30,"time":1770205604082,"pid":18589,"hostname":"unknow","reqId":"req-2","res":{"statusCode":401},"responseTime":194.2430830001831,"msg":"request completed"}
+{"level":30,"time":1770205606239,"pid":18589,"hostname":"unknow","reqId":"req-3","req":{"method":"GET","url":"/api/token","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61056},"msg":"incoming request"}
+{"level":30,"time":1770205606249,"pid":18589,"hostname":"unknow","reqId":"req-3","res":{"statusCode":200},"responseTime":9.538415908813477,"msg":"request completed"}
+{"level":30,"time":1770205606253,"pid":18589,"hostname":"unknow","reqId":"req-4","req":{"method":"GET","url":"/api/analytics/live-floor?organizationId=98881ac3-bed5-4fc6-84af-099668c6cc9b","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61062},"msg":"incoming request"}
+{"level":30,"time":1770205606264,"pid":18589,"hostname":"unknow","reqId":"req-5","req":{"method":"GET","url":"/api/panel/stats?range=day&organizationId=98881ac3-bed5-4fc6-84af-099668c6cc9b","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61064},"msg":"incoming request"}
+{"level":30,"time":1770205606269,"pid":18589,"hostname":"unknow","reqId":"req-6","req":{"method":"GET","url":"/api/pipeline/funnel?range=day&organizationId=98881ac3-bed5-4fc6-84af-099668c6cc9b","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61065},"msg":"incoming request"}
+{"level":30,"time":1770205606277,"pid":18589,"hostname":"unknow","reqId":"req-7","req":{"method":"GET","url":"/api/panel/at-risk-leads?limit=5&organizationId=98881ac3-bed5-4fc6-84af-099668c6cc9b","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61066},"msg":"incoming request"}
+{"level":30,"time":1770205606280,"pid":18589,"hostname":"unknow","reqId":"req-8","req":{"method":"GET","url":"/api/panel/top-deals?limit=5&organizationId=98881ac3-bed5-4fc6-84af-099668c6cc9b","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61067},"msg":"incoming request"}
+{"level":30,"time":1770205606283,"pid":18589,"hostname":"unknow","reqId":"req-9","req":{"method":"GET","url":"/api/panel/quality-trend?days=1&organizationId=98881ac3-bed5-4fc6-84af-099668c6cc9b","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61070},"msg":"incoming request"}
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] User: genesis9311@gmail.com ID: 377382e8-9fa9-4cd3-a36b-6c575ff5b23c
+[Auth Debug] Profile Role: manager Metadata Role: undefined
+[Auth Debug] RESOLVED ROLE: manager
+[Auth Debug] Target Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b Profile Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b
+[Auth Debug] Full Metadata: {"email_verified":true}
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] User: genesis9311@gmail.com ID: 377382e8-9fa9-4cd3-a36b-6c575ff5b23c
+[Auth Debug] Profile Role: manager Metadata Role: undefined
+[Auth Debug] RESOLVED ROLE: manager
+[Auth Debug] Target Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b Profile Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b
+[Auth Debug] Full Metadata: {"email_verified":true}
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] User: genesis9311@gmail.com ID: 377382e8-9fa9-4cd3-a36b-6c575ff5b23c
+[Auth Debug] Profile Role: manager Metadata Role: undefined
+[Auth Debug] RESOLVED ROLE: manager
+[Auth Debug] Target Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b Profile Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b
+[Auth Debug] Full Metadata: {"email_verified":true}
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] User: genesis9311@gmail.com ID: 377382e8-9fa9-4cd3-a36b-6c575ff5b23c
+[Auth Debug] Profile Role: manager Metadata Role: undefined
+[Auth Debug] RESOLVED ROLE: manager
+[Auth Debug] Target Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b Profile Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b
+[Auth Debug] Full Metadata: {"email_verified":true}
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] User: genesis9311@gmail.com ID: 377382e8-9fa9-4cd3-a36b-6c575ff5b23c
+[Auth Debug] Profile Role: manager Metadata Role: undefined
+[Auth Debug] RESOLVED ROLE: manager
+[Auth Debug] Target Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b Profile Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b
+[Auth Debug] Full Metadata: {"email_verified":true}
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] User: genesis9311@gmail.com ID: 377382e8-9fa9-4cd3-a36b-6c575ff5b23c
+[Auth Debug] Profile Role: manager Metadata Role: undefined
+[Auth Debug] RESOLVED ROLE: manager
+[Auth Debug] Target Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b Profile Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b
+[Auth Debug] Full Metadata: {"email_verified":true}
+[Auth Debug] ----------------------------------------------------------------
+{"level":30,"time":1770205607323,"pid":18589,"hostname":"unknow","reqId":"req-9","res":{"statusCode":200},"responseTime":1040.1400003433228,"msg":"request completed"}
+{"level":30,"time":1770205607330,"pid":18589,"hostname":"unknow","reqId":"req-a","req":{"method":"GET","url":"/api/analytics/team-performance?organizationId=98881ac3-bed5-4fc6-84af-099668c6cc9b&range=day","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61084},"msg":"incoming request"}
+{"level":30,"time":1770205607401,"pid":18589,"hostname":"unknow","reqId":"req-8","res":{"statusCode":200},"responseTime":1120.4087500572205,"msg":"request completed"}
+{"level":30,"time":1770205607403,"pid":18589,"hostname":"unknow","reqId":"req-b","req":{"method":"GET","url":"/api/analytics/calls-for-review?organizationId=98881ac3-bed5-4fc6-84af-099668c6cc9b&limit=5","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61087},"msg":"incoming request"}
+{"level":30,"time":1770205607415,"pid":18589,"hostname":"unknow","reqId":"req-7","res":{"statusCode":200},"responseTime":1138.4007091522217,"msg":"request completed"}
+{"level":30,"time":1770205607417,"pid":18589,"hostname":"unknow","reqId":"req-c","req":{"method":"GET","url":"/api/panel/quality-trend?days=1&organizationId=98881ac3-bed5-4fc6-84af-099668c6cc9b","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61090},"msg":"incoming request"}
+{"level":30,"time":1770205607535,"pid":18589,"hostname":"unknow","reqId":"req-6","res":{"statusCode":200},"responseTime":1266.365957736969,"msg":"request completed"}
+{"level":30,"time":1770205607537,"pid":18589,"hostname":"unknow","reqId":"req-4","res":{"statusCode":200},"responseTime":1284.3873748779297,"msg":"request completed"}
+{"level":30,"time":1770205607543,"pid":18589,"hostname":"unknow","reqId":"req-5","res":{"statusCode":200},"responseTime":1278.6597080230713,"msg":"request completed"}
+{"level":30,"time":1770205607545,"pid":18589,"hostname":"unknow","reqId":"req-d","req":{"method":"GET","url":"/api/panel/top-deals?limit=5&organizationId=98881ac3-bed5-4fc6-84af-099668c6cc9b","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61095},"msg":"incoming request"}
+{"level":30,"time":1770205607547,"pid":18589,"hostname":"unknow","reqId":"req-e","req":{"method":"GET","url":"/api/panel/at-risk-leads?limit=5&organizationId=98881ac3-bed5-4fc6-84af-099668c6cc9b","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61096},"msg":"incoming request"}
+{"level":30,"time":1770205607549,"pid":18589,"hostname":"unknow","reqId":"req-f","req":{"method":"GET","url":"/api/pipeline/funnel?range=day&organizationId=98881ac3-bed5-4fc6-84af-099668c6cc9b","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61099},"msg":"incoming request"}
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] User: genesis9311@gmail.com ID: 377382e8-9fa9-4cd3-a36b-6c575ff5b23c
+[Auth Debug] Profile Role: manager Metadata Role: undefined
+[Auth Debug] RESOLVED ROLE: manager
+[Auth Debug] Target Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b Profile Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b
+[Auth Debug] Full Metadata: {"email_verified":true}
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] User: genesis9311@gmail.com ID: 377382e8-9fa9-4cd3-a36b-6c575ff5b23c
+[Auth Debug] Profile Role: manager Metadata Role: undefined
+[Auth Debug] RESOLVED ROLE: manager
+[Auth Debug] Target Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b Profile Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b
+[Auth Debug] Full Metadata: {"email_verified":true}
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] User: genesis9311@gmail.com ID: 377382e8-9fa9-4cd3-a36b-6c575ff5b23c
+[Auth Debug] Profile Role: manager Metadata Role: undefined
+[Auth Debug] RESOLVED ROLE: manager
+[Auth Debug] Target Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b Profile Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b
+[Auth Debug] Full Metadata: {"email_verified":true}
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] User: genesis9311@gmail.com ID: 377382e8-9fa9-4cd3-a36b-6c575ff5b23c
+[Auth Debug] Profile Role: manager Metadata Role: undefined
+[Auth Debug] RESOLVED ROLE: manager
+[Auth Debug] Target Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b Profile Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b
+[Auth Debug] Full Metadata: {"email_verified":true}
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] User: genesis9311@gmail.com ID: 377382e8-9fa9-4cd3-a36b-6c575ff5b23c
+[Auth Debug] Profile Role: manager Metadata Role: undefined
+[Auth Debug] RESOLVED ROLE: manager
+[Auth Debug] Target Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b Profile Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b
+[Auth Debug] Full Metadata: {"email_verified":true}
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] User: genesis9311@gmail.com ID: 377382e8-9fa9-4cd3-a36b-6c575ff5b23c
+[Auth Debug] Profile Role: manager Metadata Role: undefined
+[Auth Debug] RESOLVED ROLE: manager
+[Auth Debug] Target Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b Profile Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b
+[Auth Debug] Full Metadata: {"email_verified":true}
+[Auth Debug] ----------------------------------------------------------------
+{"level":30,"time":1770205608055,"pid":18589,"hostname":"unknow","reqId":"req-b","res":{"statusCode":200},"responseTime":652.0662503242493,"msg":"request completed"}
+{"level":30,"time":1770205608056,"pid":18589,"hostname":"unknow","reqId":"req-c","res":{"statusCode":200},"responseTime":639.2250418663025,"msg":"request completed"}
+{"level":30,"time":1770205608059,"pid":18589,"hostname":"unknow","reqId":"req-g","req":{"method":"GET","url":"/api/analytics/live-floor?organizationId=98881ac3-bed5-4fc6-84af-099668c6cc9b","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61104},"msg":"incoming request"}
+{"level":30,"time":1770205608061,"pid":18589,"hostname":"unknow","reqId":"req-h","req":{"method":"GET","url":"/api/panel/stats?range=day&organizationId=98881ac3-bed5-4fc6-84af-099668c6cc9b","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61105},"msg":"incoming request"}
+{"level":30,"time":1770205608127,"pid":18589,"hostname":"unknow","reqId":"req-f","res":{"statusCode":200},"responseTime":578.5186252593994,"msg":"request completed"}
+{"level":30,"time":1770205608128,"pid":18589,"hostname":"unknow","reqId":"req-d","res":{"statusCode":200},"responseTime":582.8427090644836,"msg":"request completed"}
+{"level":30,"time":1770205608130,"pid":18589,"hostname":"unknow","reqId":"req-i","req":{"method":"GET","url":"/api/analytics/calls-for-review?organizationId=98881ac3-bed5-4fc6-84af-099668c6cc9b&limit=5","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61108},"msg":"incoming request"}
+{"level":30,"time":1770205608136,"pid":18589,"hostname":"unknow","reqId":"req-e","res":{"statusCode":200},"responseTime":589.210666179657,"msg":"request completed"}
+{"level":30,"time":1770205608337,"pid":18589,"hostname":"unknow","reqId":"req-a","res":{"statusCode":200},"responseTime":1007.6935000419617,"msg":"request completed"}
+{"level":30,"time":1770205608340,"pid":18589,"hostname":"unknow","reqId":"req-j","req":{"method":"GET","url":"/api/analytics/team-performance?organizationId=98881ac3-bed5-4fc6-84af-099668c6cc9b&range=day","host":"127.0.0.1:5050","remoteAddress":"127.0.0.1","remotePort":61112},"msg":"incoming request"}
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] User: genesis9311@gmail.com ID: 377382e8-9fa9-4cd3-a36b-6c575ff5b23c
+[Auth Debug] Profile Role: manager Metadata Role: undefined
+[Auth Debug] RESOLVED ROLE: manager
+[Auth Debug] Target Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b Profile Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b
+[Auth Debug] Full Metadata: {"email_verified":true}
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] User: genesis9311@gmail.com ID: 377382e8-9fa9-4cd3-a36b-6c575ff5b23c
+[Auth Debug] Profile Role: manager Metadata Role: undefined
+[Auth Debug] RESOLVED ROLE: manager
+[Auth Debug] Target Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b Profile Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b
+[Auth Debug] Full Metadata: {"email_verified":true}
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] User: genesis9311@gmail.com ID: 377382e8-9fa9-4cd3-a36b-6c575ff5b23c
+[Auth Debug] Profile Role: manager Metadata Role: undefined
+[Auth Debug] RESOLVED ROLE: manager
+[Auth Debug] Target Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b Profile Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b
+[Auth Debug] Full Metadata: {"email_verified":true}
+[Auth Debug] ----------------------------------------------------------------
+{"level":30,"time":1770205608637,"pid":18589,"hostname":"unknow","reqId":"req-h","res":{"statusCode":200},"responseTime":576.4072079658508,"msg":"request completed"}
+{"level":30,"time":1770205608775,"pid":18589,"hostname":"unknow","reqId":"req-i","res":{"statusCode":200},"responseTime":645.1507081985474,"msg":"request completed"}
+[Auth Debug] ----------------------------------------------------------------
+[Auth Debug] User: genesis9311@gmail.com ID: 377382e8-9fa9-4cd3-a36b-6c575ff5b23c
+[Auth Debug] Profile Role: manager Metadata Role: undefined
+[Auth Debug] RESOLVED ROLE: manager
+[Auth Debug] Target Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b Profile Org: 98881ac3-bed5-4fc6-84af-099668c6cc9b
+[Auth Debug] Full Metadata: {"email_verified":true}
+[Auth Debug] ----------------------------------------------------------------
+{"level":30,"time":1770205608827,"pid":18589,"hostname":"unknow","reqId":"req-g","res":{"statusCode":200},"responseTime":767.8329157829285,"msg":"request completed"}
+{"level":30,"time":1770205609381,"pid":18589,"hostname":"unknow","reqId":"req-j","res":{"statusCode":200},"responseTime":1041.4506249427795,"msg":"request completed"}

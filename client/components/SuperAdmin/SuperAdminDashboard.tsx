@@ -26,12 +26,15 @@ import {
    Settings,
    Eye,
    Plus,
-   Loader2
+   Loader2,
+   Phone
 } from 'lucide-react';
 import { Button } from '../Common/Button';
 import { Badge } from '../Common/Badge';
 import { supabase } from '../../src/lib/supabaseClient';
 import { InviteUserModal } from '../Admin/InviteUserModal';
+import { AdminPhoneManagerModal } from './AdminPhoneManagerModal';
+import { CreateOrgWizard } from './CreateOrgWizard';
 
 interface SuperAdminDashboardProps {
    onLogout: () => void;
@@ -86,6 +89,7 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onLogo
    const [showDeleteOrgModal, setShowDeleteOrgModal] = useState<Organization | null>(null);
    const [showDeleteUserModal, setShowDeleteUserModal] = useState<OrgUser | null>(null);
    const [showVerificationPanel, setShowVerificationPanel] = useState(false);
+   const [showPhoneModal, setShowPhoneModal] = useState<Organization | null>(null);
 
    // Modal Form State
    const [newOrgName, setNewOrgName] = useState('');
@@ -548,6 +552,13 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onLogo
                                  <td className="px-6 py-4 text-left">
                                     <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                        <button
+                                          onClick={() => setShowPhoneModal(org)}
+                                          className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+                                          title="ניהול טלפוניה"
+                                       >
+                                          <Phone className="w-4 h-4" />
+                                       </button>
+                                       <button
                                           onClick={() => openUsersModal(org.id)}
                                           className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 rounded-lg transition-colors"
                                           title="צפה במשתמשים"
@@ -600,77 +611,26 @@ export const SuperAdminDashboard: React.FC<SuperAdminDashboardProps> = ({ onLogo
 
          {/* ===== MODALS ===== */}
 
-         {/* Create Org Modal */}
-         {
-            showCreateModal && (
-               <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                  <div className="bg-white dark:bg-slate-900 rounded-2xl p-6 w-full max-w-md shadow-2xl">
-                     <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-lg font-bold text-slate-900 dark:text-white">יצירת ארגון חדש</h3>
-                        <button onClick={() => setShowCreateModal(false)} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg">
-                           <X className="w-5 h-5 text-slate-400" />
-                        </button>
-                     </div>
-                     <input
-                        type="text"
-                        placeholder="שם הארגון"
-                        value={newOrgName}
-                        onChange={(e) => setNewOrgName(e.target.value)}
-                        className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm mb-4"
-                        autoFocus
-                     />
-                     <div className="mb-6">
-                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 block">תוכנית</label>
-                        <div className="grid grid-cols-3 gap-2">
-                           {['free', 'pro', 'enterprise'].map(plan => (
-                              <button
-                                 key={plan}
-                                 onClick={() => setNewOrgPlan(plan)}
-                                 className={`py-2 px-3 text-sm rounded-lg border transition-all ${newOrgPlan === plan
-                                    ? 'bg-indigo-600 text-white border-indigo-600'
-                                    : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
-                                    }`}
-                              >
-                                 {plan.charAt(0).toUpperCase() + plan.slice(1)}
-                              </button>
-                           ))}
-                        </div>
-                     </div>
-                     <div className="mb-6">
-                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-2 block">סוג מוקד</label>
-                        <div className="grid grid-cols-2 gap-2">
-                           <button
-                              onClick={() => setNewCenterType('sales')}
-                              className={`py-3 px-4 text-sm rounded-lg border transition-all flex items-center justify-center gap-2 ${newCenterType === 'sales'
-                                 ? 'bg-indigo-600 text-white border-indigo-600'
-                                 : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
-                                 }`}
-                           >
-                              📞 מוקד מכירות
-                           </button>
-                           <button
-                              onClick={() => setNewCenterType('support')}
-                              className={`py-3 px-4 text-sm rounded-lg border transition-all flex items-center justify-center gap-2 ${newCenterType === 'support'
-                                 ? 'bg-emerald-600 text-white border-emerald-600'
-                                 : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-emerald-300'
-                                 }`}
-                           >
-                              🎧 מוקד שירות
-                           </button>
-                        </div>
-                     </div>
-                     <div className="flex gap-3">
-                        <Button variant="secondary" className="flex-1" onClick={() => setShowCreateModal(false)}>
-                           ביטול
-                        </Button>
-                        <Button className="flex-1" onClick={handleCreateOrg} disabled={actionLoading || !newOrgName.trim()}>
-                           {actionLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'צור ארגון'}
-                        </Button>
-                     </div>
-                  </div>
-               </div>
-            )
-         }
+         {/* Phone Manager Modal */}
+         {showPhoneModal && (
+            <AdminPhoneManagerModal
+               isOpen={true}
+               onClose={() => setShowPhoneModal(null)}
+               orgId={showPhoneModal.id}
+               orgName={showPhoneModal.name}
+            />
+         )}
+
+         {/* Create Org Wizard */}
+         <CreateOrgWizard
+            isOpen={showCreateModal}
+            onClose={() => setShowCreateModal(false)}
+            onSuccess={() => {
+               setShowCreateModal(false);
+               fetchOrganizations();
+               fetchIsolationReport();
+            }}
+         />
 
          {/* Delete Org Modal */}
          {

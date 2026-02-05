@@ -298,6 +298,104 @@ async function registerAdminRoutes(fastify) {
     });
 
     // ==========================================
+    // PHONE MANAGEMENT
+    // ==========================================
+
+    // GET /api/admin/organizations/:orgId/phone-config - Get org settings + all users' phone configs
+    fastify.get('/api/admin/organizations/:orgId/phone-config', {
+        preHandler: requirePlatformAdmin
+    }, async (request, reply) => {
+        try {
+            const { orgId } = request.params;
+
+            // 1. Get Org Settings (Business Line)
+            const { data: orgSettings } = await supabaseAdmin
+                .from('organization_settings')
+                .select('twilio_phone_number')
+                .eq('organization_id', orgId)
+                .single();
+
+            // 2. Get Users with their Phone Configs
+            const { data: users, error: usersError } = await supabaseAdmin
+                .from('profiles')
+                .select('id, full_name, email, role, twilio_phone_number, phone_rotator_config')
+                .eq('organization_id', orgId);
+
+            if (usersError) throw usersError;
+
+            return {
+                success: true,
+                config: {
+                    business_line: orgSettings?.twilio_phone_number || '',
+                    users: users || []
+                }
+            };
+        } catch (err) {
+            console.error('[Admin API] Get Phone Config Error:', err.message);
+            return reply.code(500).send({ error: err.message });
+        }
+    });
+
+    // POST /api/admin/organizations/:orgId/phone-config - Update Org Business Line
+    fastify.post('/api/admin/organizations/:orgId/phone-config', {
+        preHandler: requirePlatformAdmin
+    }, async (request, reply) => {
+        try {
+            const { orgId } = request.params;
+            const { twilio_phone_number } = request.body;
+
+            // Update or Insert Org Settings using upsert
+            const { error } = await supabaseAdmin
+                .from('organization_settings')
+                .upsert({
+                    organization_id: orgId,
+                    twilio_phone_number
+                }, { onConflict: 'organization_id' });
+
+            if (error) throw error;
+            return { success: true };
+        } catch (err) {
+            console.error('[Admin API] Update Org Phone Error:', err.message);
+            return reply.code(500).send({ error: err.message });
+        }
+    });
+
+    // POST /api/admin/users/:userId/phone-config - Update User Phone Config (Admin Override)
+    fastify.post('/api/admin/users/:userId/phone-config', {
+        preHandler: requirePlatformAdmin
+    }, async (request, reply) => {
+        try {
+            const { userId } = request.params;
+            const { config } = request.body; // Expects full phone_rotator_config + numeric twilio_phone_number fallback
+
+            // Update profile directly
+            // Note: DBService.updateUserPhoneConfig is for users self-update. Admin uses direct supabaseAdmin.
+            const updates = {};
+
+            // If legacy number is provided (or cleared)
+            if (config.twilio_phone_number !== undefined) {
+                updates.twilio_phone_number = config.twilio_phone_number;
+            }
+
+            // If rotator config is provided
+            if (config.phone_rotator_config) {
+                updates.phone_rotator_config = config.phone_rotator_config;
+            }
+
+            const { error } = await supabaseAdmin
+                .from('profiles')
+                .update(updates)
+                .eq('id', userId);
+
+            if (error) throw error;
+            return { success: true };
+        } catch (err) {
+            console.error('[Admin API] Update User Phone Error:', err.message);
+            return reply.code(500).send({ error: err.message });
+        }
+    });
+
+    // ==========================================
     // INVITATIONS
     // ==========================================
 
