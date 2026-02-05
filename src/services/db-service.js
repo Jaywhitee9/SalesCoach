@@ -71,8 +71,13 @@ class DBService {
             console.log(`[Supabase] Transcript entries: agent=${callData.transcripts?.agent?.length || 0}, customer=${callData.transcripts?.customer?.length || 0}`);
 
             // Update the existing call record created at start
-            // Note: CallSid is stored in recording_url field as 'sid:CAxxxx'
-            const { data, error } = await supabase
+            // FIRST: Try to match by recording_url (before recording callback ran)
+            // SECOND: If not found, try to find by callSid contained in recording_url (after recording callback)
+            let data = null;
+            let error = null;
+
+            // Attempt 1: Match by sid:CallSid
+            const result1 = await supabase
                 .from('calls')
                 .update({
                     status: 'completed',
@@ -83,6 +88,34 @@ class DBService {
                 .eq('recording_url', recordingUrlToMatch)
                 .select()
                 .single();
+
+            data = result1.data;
+            error = result1.error;
+
+            // Attempt 2: If Attempt 1 failed, try matching by lead_id and agent_id with recent time
+            if (error && callData.leadId && callData.agentId) {
+                console.log(`[Supabase] Attempt 1 failed, trying by lead_id + agent_id...`);
+                const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+                const result2 = await supabase
+                    .from('calls')
+                    .update({
+                        status: 'completed',
+                        duration: Math.floor((Date.now() - callData.startTime) / 1000),
+                        transcript: callData.transcripts,
+                        coaching_tips: callData.coachingHistory || [],
+                    })
+                    .eq('lead_id', callData.leadId)
+                    .eq('agent_id', callData.agentId)
+                    .gte('created_at', fiveMinutesAgo)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .select()
+                    .single();
+
+                data = result2.data;
+                error = result2.error;
+            }
 
             if (error) {
                 // Fallback: Insert if missing (should not happen if call was created on start)
