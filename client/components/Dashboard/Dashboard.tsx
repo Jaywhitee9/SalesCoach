@@ -11,7 +11,6 @@ import {
   Clock,
   TrendingUp,
   Award,
-  Radio,
   Target,
   FileText,
   Lightbulb,
