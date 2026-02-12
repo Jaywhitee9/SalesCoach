@@ -2,39 +2,36 @@ import React, { useState, useEffect } from 'react';
 import {
   ArrowUpRight,
   ArrowDownRight,
-  Filter,
   Calendar,
   ChevronDown,
   Users,
-  TrendingUp,
   AlertOctagon,
-  ArrowLeft,
-  Search,
-  LayoutList,
-  Play,
   Phone,
   Target,
-  Clock,
   CheckCircle2,
-  Flame,
-  ArrowLeftCircle,
-  MoreHorizontal,
-  UserPlus,
-  Archive,
   BarChart3,
-  ChevronLeft
+  UserPlus,
+  TrendingUp,
+  Clock,
+  ArrowRight
 } from 'lucide-react';
-import { Button } from '../Common/Button';
-import { Badge } from '../Common/Badge';
 import { LeadDrawer } from '../Leads/LeadDrawer';
 import { supabase } from '../../src/lib/supabaseClient';
 import { Lead, User } from '../../types';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 interface PipelineDashboardProps {
   isDarkMode: boolean;
   currentUser?: User;
 }
+
+// Gradient colors for pipeline stages
+const STAGE_GRADIENTS = [
+  'linear-gradient(90deg, #3b82f6 0%, #2563eb 100%)',
+  'linear-gradient(90deg, #8b5cf6 0%, #7c3aed 100%)',
+  'linear-gradient(90deg, #06b6d4 0%, #0891b2 100%)',
+  'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)',
+  'linear-gradient(90deg, #10b981 0%, #059669 100%)',
+];
 
 export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode, currentUser }) => {
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -85,18 +82,12 @@ export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode
   useEffect(() => {
     const fetchData = async () => {
       if (!currentUser?.organization_id) {
-        // console.log('Skipping fetch: No organization_id', currentUser);
         setLoading(false);
         return;
       }
 
-      // console.log('Fetching Pipeline Data. Org:', currentUser.organization_id);
-
       setLoading(true);
       try {
-        // Determine effective User ID for filtering
-        // If Rep: Always their own ID
-        // If Manager: 'all' (empty) or specific filtered ID
         let targetUserId = '';
         if (isRep && currentUser?.id) {
           targetUserId = currentUser.id;
@@ -105,7 +96,7 @@ export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode
         }
 
         const userIdParam = targetUserId ? `&userId=${targetUserId}` : '';
-        const rangeParam = `&range=${dateRange === 'היום' ? 'day' : dateRange === 'שבוע' ? 'week' : 'month'}`; // Simplified range mapping
+        const rangeParam = `&range=${dateRange === 'היום' ? 'day' : dateRange === 'שבוע' ? 'week' : 'month'}`;
         const orgParam = currentUser?.organization_id ? `&organizationId=${currentUser.organization_id}` : '';
 
         const { data: { session } } = await supabase.auth.getSession();
@@ -149,81 +140,99 @@ export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode
   // Derived Values
   const totalSourcesValue = sourcesData.reduce((acc, curr) => acc + curr[sourceMetric], 0);
   const maxSourceValue = sourcesData.length > 0 ? Math.max(...sourcesData.map(s => s[sourceMetric])) : 1;
+  const maxFunnelCount = funnelData.length > 0 ? Math.max(...funnelData.map(s => s.count), 1) : 1;
 
-  // KPI Calculations (Map from Panel Stats to Manager KPIs)
-  const kpis = [
-    { label: 'סה"כ שיחות', value: stats?.leadsContacted?.current || 0, change: '+0%', positive: true, subtext: 'מספר שיחות' },
-    { label: 'לידים חדשים', value: stats?.newLeads?.current || 0, change: '+0%', positive: true, subtext: 'כמות לידים' },
-    { label: 'פגישות', value: stats?.appointments?.current || 0, change: '+0%', positive: true, subtext: 'פגישות שנקבעו' },
-    { label: 'סגירות', value: stats?.closedDeals?.current || 0, change: '+0%', positive: true, subtext: 'עסקאות שנסגרו' },
+  // KPI config
+  const kpiIconConfigs = [
+    { icon: Phone, color: '#6366f1' },
+    { icon: UserPlus, color: '#059669' },
+    { icon: Calendar, color: '#2563eb' },
+    { icon: TrendingUp, color: '#d97706' },
   ];
 
+  const kpis = [
+    { label: 'סה"כ שיחות', value: stats?.leadsContacted?.current || 0, change: stats?.leadsContacted?.change, positive: true },
+    { label: 'לידים חדשים', value: stats?.newLeads?.current || 0, change: stats?.newLeads?.change, positive: true },
+    { label: 'פגישות', value: stats?.appointments?.current || 0, change: stats?.appointments?.change, positive: true },
+    { label: 'סגירות', value: stats?.closedDeals?.current || 0, change: stats?.closedDeals?.change, positive: true },
+  ];
+
+  const hasMeaningfulChange = (change?: string) => {
+    if (!change) return false;
+    const cleaned = change.replace(/[+\-%]/g, '').trim();
+    return cleaned !== '0' && cleaned !== '';
+  };
+
+  const sourceNameMap: Record<string, string> = {
+    'Website': 'אתר אינטרנט',
+    'Unknown': 'לא ידוע',
+    'Webinar': 'וובינר',
+    'LinkedIn': 'לינקדאין',
+    'Facebook': 'פייסבוק',
+    'Referral': 'הפניה',
+    'Instagram': 'אינסטגרם',
+  };
+
   return (
-    <div className="flex-1 overflow-y-auto p-6 lg:p-8 bg-slate-50 dark:bg-slate-950 font-sans relative">
+    <div className="flex-1 overflow-y-auto font-sans" style={{ background: '#fafbfc' }}>
+      <div className={`transition-opacity duration-300 ${loading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}
+        style={{ maxWidth: 1440, margin: '0 auto', padding: '32px 40px' }}>
 
-      {/* Loading Overlay or Opacity Transition */}
-      <div className={`transition-opacity duration-300 ${loading ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
-
-        {/* 1. Top Bar: Title & Global Filters */}
+        {/* ═══════════════════════ HEADER ═══════════════════════ */}
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
+            <h1 className="text-[24px] font-bold" style={{ color: '#0f172a', letterSpacing: '-0.5px' }}>
               {isRep ? 'הפאנל שלי' : 'לידים & פאנל'}
             </h1>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-sm text-slate-500 dark:text-slate-400">
-                {isRep ? 'ביצועים אישיים בזמן אמת' : 'סקירת משפך המכירות וניהול לידים'}
-              </span>
-              <Badge variant="success" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 border border-emerald-100 dark:border-emerald-800">
-                נתוני אמת ⚡
-              </Badge>
-            </div>
+            <p className="text-[13px] mt-1" style={{ color: '#64748b' }}>
+              {isRep ? 'ביצועים אישיים בזמן אמת' : 'סקירת משפך המכירות וניהול לידים'}
+            </p>
           </div>
 
-          {/* Filters Group */}
-          <div className="flex items-center gap-3 relative z-20">
-
+          {/* Filter Group */}
+          <div className="flex items-center gap-2 relative z-20">
             {/* Team Dropdown (Managers Only) */}
             {!isRep && (
               <div className="relative">
-                <Button
-                  variant="secondary"
-                  className="hidden sm:flex bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 min-w-[140px] justify-between items-center"
+                <button
                   onClick={() => { setIsTeamOpen(!isTeamOpen); setIsTimeOpen(false); }}
+                  className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-md text-[13px] font-medium transition-colors hover:bg-white"
+                  style={{ background: '#fff', border: '1px solid #e5e7eb', color: '#334155', minWidth: 140 }}
                 >
-                  <div className="flex items-center">
-                    <Users className="w-4 h-4 ml-2" />
-                    <span className="truncate max-w-[100px] text-sm">
-                      {selectedTeam === 'all' ? 'כל הצוות' : teamMembers.find(m => m.id === selectedTeam)?.name || 'כל הצוות'}
-                    </span>
-                  </div>
-                  <ChevronDown className={`w-3.5 h-3.5 mr-2 opacity-50 transition-transform duration-200 ${isTeamOpen ? 'rotate-180' : ''}`} />
-                </Button>
+                  <Users className="w-3.5 h-3.5" style={{ color: '#94a3b8' }} />
+                  <span className="truncate max-w-[100px]">
+                    {selectedTeam === 'all' ? 'כל הצוות' : teamMembers.find(m => m.id === selectedTeam)?.name || 'כל הצוות'}
+                  </span>
+                  <ChevronDown className={`w-3 h-3 mr-auto transition-transform ${isTeamOpen ? 'rotate-180' : ''}`} style={{ color: '#94a3b8' }} />
+                </button>
 
                 {isTeamOpen && (
                   <>
-                    <div className="fixed inset-0 z-10" onClick={() => setIsTeamOpen(false)}></div>
-                    <div className="absolute top-full left-0 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-20 py-1.5 animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+                    <div className="fixed inset-0 z-10" onClick={() => setIsTeamOpen(false)} />
+                    <div className="absolute top-full left-0 mt-1.5 w-56 bg-white rounded-lg z-20 py-1 overflow-hidden"
+                      style={{ border: '1px solid #e5e7eb', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
                       <button
                         onClick={() => { setSelectedTeam('all'); setIsTeamOpen(false); }}
-                        className={`w-full text-right px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-between ${selectedTeam === 'all' ? 'bg-brand-50/50 dark:bg-brand-900/10 text-brand-600 dark:text-brand-400' : 'text-slate-700 dark:text-slate-200'}`}
+                        className="w-full text-right px-3.5 py-2 text-[13px] hover:bg-[#f8fafc] transition-colors flex items-center justify-between"
+                        style={{ color: selectedTeam === 'all' ? '#2563eb' : '#334155', fontWeight: selectedTeam === 'all' ? 600 : 400 }}
                       >
-                        <span className="font-medium">כל הצוות</span>
-                        {selectedTeam === 'all' && <CheckCircle2 className="w-4 h-4" />}
+                        <span>כל הצוות</span>
+                        {selectedTeam === 'all' && <CheckCircle2 className="w-3.5 h-3.5" style={{ color: '#2563eb' }} />}
                       </button>
-                      <div className="h-px bg-slate-100 dark:bg-slate-800 my-1"></div>
+                      <div style={{ height: 1, background: '#f1f5f9', margin: '2px 0' }} />
                       <div className="max-h-[240px] overflow-y-auto">
                         {teamMembers.map(member => (
                           <button
                             key={member.id}
                             onClick={() => { setSelectedTeam(member.id); setIsTeamOpen(false); }}
-                            className={`w-full text-right px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-between group ${selectedTeam === member.id ? 'bg-brand-50/50 dark:bg-brand-900/10 text-brand-600 dark:text-brand-400' : 'text-slate-700 dark:text-slate-200'}`}
+                            className="w-full text-right px-3.5 py-2 text-[13px] hover:bg-[#f8fafc] transition-colors flex items-center justify-between"
+                            style={{ color: selectedTeam === member.id ? '#2563eb' : '#334155', fontWeight: selectedTeam === member.id ? 600 : 400 }}
                           >
-                            <div className="flex items-center gap-3">
-                              <img src={member.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}`} className="w-6 h-6 rounded-full border border-slate-100 dark:border-slate-700 object-cover" alt="" />
+                            <div className="flex items-center gap-2.5">
+                              <img src={member.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}&size=24`} className="w-5 h-5 rounded-full" alt="" />
                               <span className="truncate">{member.name}</span>
                             </div>
-                            {selectedTeam === member.id && <CheckCircle2 className="w-4 h-4" />}
+                            {selectedTeam === member.id && <CheckCircle2 className="w-3.5 h-3.5" style={{ color: '#2563eb' }} />}
                           </button>
                         ))}
                       </div>
@@ -235,243 +244,371 @@ export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode
 
             {/* Time Dropdown */}
             <div className="relative">
-              <Button
-                variant="secondary"
-                className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 min-w-[140px] justify-between items-center"
+              <button
                 onClick={() => { setIsTimeOpen(!isTimeOpen); setIsTeamOpen(false); }}
+                className="flex items-center gap-2 px-3 py-2 rounded-md text-[13px] font-medium transition-colors hover:bg-white"
+                style={{ background: '#fff', border: '1px solid #e5e7eb', color: '#334155', minWidth: 130 }}
               >
-                <div className="flex items-center">
-                  <Calendar className="w-4 h-4 ml-2" />
-                  <span className="text-sm">{dateRange === 'month' ? 'החודש' : dateRange === 'week' ? 'השבוע' : dateRange}</span>
-                </div>
-                <ChevronDown className={`w-3.5 h-3.5 mr-2 opacity-50 transition-transform duration-200 ${isTimeOpen ? 'rotate-180' : ''}`} />
-              </Button>
+                <Calendar className="w-3.5 h-3.5" style={{ color: '#94a3b8' }} />
+                <span>{dateRange === 'month' ? 'החודש' : dateRange === 'week' ? 'השבוע' : dateRange === 'היום' ? 'היום' : dateRange}</span>
+                <ChevronDown className={`w-3 h-3 mr-auto transition-transform ${isTimeOpen ? 'rotate-180' : ''}`} style={{ color: '#94a3b8' }} />
+              </button>
 
               {isTimeOpen && (
                 <>
-                  <div className="fixed inset-0 z-10" onClick={() => setIsTimeOpen(false)}></div>
-                  <div className="absolute top-full left-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-20 py-1.5 animate-in fade-in zoom-in-95 duration-200">
-                    {['היום', 'שבוע', 'חודש'].map(range => (
+                  <div className="fixed inset-0 z-10" onClick={() => setIsTimeOpen(false)} />
+                  <div className="absolute top-full left-0 mt-1.5 w-44 bg-white rounded-lg z-20 py-1"
+                    style={{ border: '1px solid #e5e7eb', boxShadow: '0 4px 16px rgba(0,0,0,0.08)' }}>
+                    {[{ key: 'היום', label: 'היום' }, { key: 'week', label: 'השבוע' }, { key: 'month', label: 'החודש' }].map(range => (
                       <button
-                        key={range}
-                        onClick={() => { setDateRange(range); setIsTimeOpen(false); }}
-                        className={`w-full text-right px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-between ${dateRange === range ? 'text-brand-600 bg-brand-50/50 dark:bg-brand-900/10 font-medium' : 'text-slate-700 dark:text-slate-200'}`}
+                        key={range.key}
+                        onClick={() => { setDateRange(range.key); setIsTimeOpen(false); }}
+                        className="w-full text-right px-3.5 py-2 text-[13px] hover:bg-[#f8fafc] transition-colors flex items-center justify-between"
+                        style={{ color: dateRange === range.key ? '#2563eb' : '#334155', fontWeight: dateRange === range.key ? 600 : 400 }}
                       >
-                        <span>{range === 'month' ? 'החודש' : range === 'week' ? 'השבוע' : range}</span>
-                        {dateRange === range && <CheckCircle2 className="w-4 h-4" />}
+                        <span>{range.label}</span>
+                        {dateRange === range.key && <CheckCircle2 className="w-3.5 h-3.5" style={{ color: '#2563eb' }} />}
                       </button>
                     ))}
                   </div>
                 </>
               )}
             </div>
-
           </div>
         </div>
 
-        {/* 2. KPI Strip */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {kpis.map((kpi, idx) => (
-            <div key={idx} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
-              <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mb-1">{kpi.label}</p>
-              <div className="flex items-end justify-between">
-                <span className="text-3xl font-bold text-slate-900 dark:text-white">{kpi.value}</span>
-                <span className={`flex items-center text-xs font-bold px-1.5 py-0.5 rounded ${kpi.positive
-                  ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-900/30 dark:text-emerald-400'
-                  : 'text-rose-700 bg-rose-50 dark:bg-rose-900/30 dark:text-rose-400'
-                  }`}>
-                  {kpi.positive ? <ArrowUpRight className="w-3 h-3 ml-1" /> : <ArrowDownRight className="w-3 h-3 ml-1" />}
-                  {kpi.change}
-                </span>
+        {/* ═══════════════════════ KPI STRIP ═══════════════════════ */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+          {kpis.map((kpi, index) => {
+            const config = kpiIconConfigs[index] || kpiIconConfigs[0];
+            const KpiIcon = config.icon;
+
+            return (
+              <div
+                key={index}
+                className="bg-white rounded-lg p-5 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition-all duration-200 cursor-default"
+                style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.03), 0 1px 3px rgba(0,0,0,0.02)' }}
+              >
+                <div className="flex items-center justify-between mb-4">
+                  <KpiIcon className="w-[18px] h-[18px]" style={{ color: config.color, opacity: 0.6 }} strokeWidth={1.5} />
+                  {hasMeaningfulChange(kpi.change) && (
+                    <span className="text-[11px] font-semibold flex items-center gap-0.5" style={{ color: kpi.positive ? '#059669' : '#dc2626' }}>
+                      {kpi.positive ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
+                      {kpi.change}
+                    </span>
+                  )}
+                </div>
+                <div className="text-[48px] font-bold leading-none" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}>
+                  {kpi.value}
+                </div>
+                <div className="text-[13px] font-medium mt-2" style={{ color: '#64748b' }}>{kpi.label}</div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
-        {/* 3. Middle Area: Visual Pipeline & Sources */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-8">
+        {/* ═══════════════════════ MIDDLE: PIPELINE + SOURCES ═══════════════════════ */}
+        <div className="grid grid-cols-1 xl:grid-cols-10 gap-6 mb-8">
 
-          {/* Right Card: Funnel (Visual Right) */}
-          <div className="xl:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm p-6 flex flex-col">
-            <div className="flex items-start justify-between mb-8">
-              <div>
-                <h2 className="font-bold text-slate-900 dark:text-white text-base">משפך המכירות</h2>
-                <p className="text-xs text-slate-500 mt-1">נתונים בזמן אמת מתוך {isRep ? 'הפעילות שלי' : 'כלל הארגון'}</p>
+          {/* LEFT: Pipeline Funnel (70%) */}
+          <div className="xl:col-span-7 bg-white rounded-lg overflow-hidden"
+            style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+
+            {/* Header */}
+            <div className="px-6 py-5 flex items-center justify-between" style={{ borderBottom: '1px solid #f1f5f9' }}>
+              <div className="flex items-center gap-2.5">
+                <BarChart3 className="w-4 h-4" style={{ color: '#6366f1' }} strokeWidth={1.5} />
+                <div>
+                  <h2 className="text-[15px] font-semibold" style={{ color: '#0f172a' }}>משפך המכירות</h2>
+                  <p className="text-[12px]" style={{ color: '#94a3b8' }}>נתונים בזמן אמת • {isRep ? 'הפעילות שלי' : 'כלל הארגון'}</p>
+                </div>
               </div>
             </div>
 
-            <div className="flex flex-col gap-6 flex-1 justify-center px-4">
-              {funnelData.map((stage, index) => {
-                // Calculate conversion from previous stage
-                const prevCount = index > 0 ? funnelData[index - 1].count : stage.count;
-                const conversionRate = index > 0 ? Math.round((stage.count / prevCount) * 100) : null;
+            {/* Funnel Bars */}
+            <div className="px-6 py-6 space-y-6">
+              {funnelData.length === 0 ? (
+                <div className="text-center py-12">
+                  <BarChart3 className="w-8 h-8 mx-auto mb-3" style={{ color: '#d1d5db' }} strokeWidth={1.5} />
+                  <p className="text-[15px] font-semibold" style={{ color: '#0f172a' }}>אין נתוני משפך</p>
+                  <p className="text-[13px] mt-1" style={{ color: '#94a3b8' }}>הנתונים יופיעו כאן כשיהיו לידים</p>
+                </div>
+              ) : (
+                funnelData.map((stage, index) => {
+                  const barWidth = maxFunnelCount > 0 ? Math.max((stage.count / maxFunnelCount) * 100, 3) : 3;
+                  const gradient = STAGE_GRADIENTS[index % STAGE_GRADIENTS.length];
 
-                return (
-                  <div key={stage.id} className="group flex items-center gap-4">
-                    {/* Label - Right Aligned */}
-                    <div className="w-24 sm:w-32 flex-shrink-0 text-right font-medium text-sm text-slate-700 dark:text-slate-300">
-                      {stage.label}
+                  return (
+                    <div key={stage.id} className="group">
+                      {/* Stage header */}
+                      <div className="flex items-baseline justify-between mb-2.5">
+                        <span className="text-[14px] font-medium" style={{ color: '#1e293b' }}>{stage.label}</span>
+                        <div className="flex items-baseline gap-3">
+                          <span className="text-[18px] font-bold" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}>
+                            {stage.count}
+                          </span>
+                          <span className="text-[12px] font-semibold" style={{ color: '#64748b' }}>
+                            {stage.percentage || Math.round((stage.count / (maxFunnelCount || 1)) * 100)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Bar */}
+                      <div className="h-7 rounded-md overflow-hidden" style={{ background: '#f1f5f9' }}>
+                        <div
+                          className="h-full rounded-md transition-all duration-700 group-hover:brightness-110"
+                          style={{ width: `${barWidth}%`, background: gradient }}
+                        />
+                      </div>
+
+                      {/* Separator */}
+                      {index < funnelData.length - 1 && (
+                        <div className="mt-4" style={{ height: 1, background: '#e5e7eb', opacity: 0.5 }} />
+                      )}
                     </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
 
-                    {/* Bar Track - Middle */}
-                    <div className="flex-1 h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden relative">
-                      <div
-                        className="absolute top-0 bottom-0 right-0 rounded-l-full transition-all duration-1000 ease-out group-hover:brightness-95"
-                        style={{
-                          width: `${stage.percentage}%`,
-                          backgroundColor: stage.color,
-                          opacity: isDarkMode ? 0.9 : 1
-                        }}
-                      >
+          {/* RIGHT: Source Breakdown (30%) */}
+          <div className="xl:col-span-3 bg-white rounded-lg overflow-hidden flex flex-col"
+            style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+
+            {/* Header */}
+            <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #f1f5f9' }}>
+              <div className="flex items-center gap-2.5">
+                <Target className="w-4 h-4" style={{ color: '#2563eb' }} strokeWidth={1.5} />
+                <h2 className="text-[15px] font-semibold" style={{ color: '#0f172a' }}>פילוח מקורות</h2>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="px-5 pt-3 flex gap-1" style={{ borderBottom: '1px solid #e5e7eb' }}>
+              <button
+                onClick={() => setSourceMetric('leads')}
+                className="px-4 py-2 text-[13px] font-medium transition-colors"
+                style={{
+                  color: sourceMetric === 'leads' ? '#2563eb' : '#64748b',
+                  borderBottom: sourceMetric === 'leads' ? '2px solid #2563eb' : '2px solid transparent',
+                  fontWeight: sourceMetric === 'leads' ? 600 : 500,
+                  marginBottom: -1,
+                }}
+              >
+                לידים
+              </button>
+              <button
+                onClick={() => setSourceMetric('revenue')}
+                className="px-4 py-2 text-[13px] font-medium transition-colors"
+                style={{
+                  color: sourceMetric === 'revenue' ? '#2563eb' : '#64748b',
+                  borderBottom: sourceMetric === 'revenue' ? '2px solid #2563eb' : '2px solid transparent',
+                  fontWeight: sourceMetric === 'revenue' ? 600 : 500,
+                  marginBottom: -1,
+                }}
+              >
+                הכנסות
+              </button>
+            </div>
+
+            {/* Source List */}
+            <div className="px-5 py-5 flex-1 space-y-5">
+              {sourcesData.length === 0 ? (
+                <div className="text-center py-10">
+                  <Target className="w-6 h-6 mx-auto mb-2" style={{ color: '#d1d5db' }} strokeWidth={1.5} />
+                  <p className="text-[13px] font-medium" style={{ color: '#64748b' }}>אין נתוני מקורות</p>
+                </div>
+              ) : (
+                sourcesData.slice(0, 5).map((source, i) => {
+                  const value = source[sourceMetric];
+                  const percentage = totalSourcesValue > 0 ? Math.round((value / totalSourcesValue) * 100) : 0;
+                  const widthPercentage = maxSourceValue > 0 ? Math.max((value / maxSourceValue) * 100, 5) : 0;
+
+                  return (
+                    <div key={i}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[13px] font-medium" style={{ color: '#1e293b' }}>
+                          {sourceNameMap[source.name] || source.name}
+                        </span>
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-[16px] font-bold" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+                            {sourceMetric === 'revenue' ? `₪${value.toLocaleString('he-IL')}` : value}
+                          </span>
+                          <span className="text-[11px] font-semibold" style={{ color: '#64748b' }}>({percentage}%)</span>
+                        </div>
+                      </div>
+                      <div className="h-2 rounded-full overflow-hidden" style={{ background: '#f1f5f9' }}>
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{ width: `${widthPercentage}%`, background: 'linear-gradient(90deg, #3b82f6, #2563eb)' }}
+                        />
                       </div>
                     </div>
-
-                    {/* Stats - Left Aligned (Visual Left) */}
-                    <div className="w-20 sm:w-24 flex-shrink-0 flex items-center justify-end gap-2 text-left">
-                      <span className="font-bold text-slate-900 dark:text-white tabular-nums text-sm">{stage.count}</span>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
-          </div>
 
-          {/* Left Card: Sources (Visual Left) */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col h-full overflow-hidden">
-
-            {/* Header & Switcher */}
-            <div className="px-6 py-5 border-b border-transparent flex items-center justify-between">
-              <h2 className="font-bold text-slate-900 dark:text-white text-base">פילוח מקורות</h2>
-              <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-lg flex text-xs font-medium">
-                <button
-                  onClick={() => setSourceMetric('leads')}
-                  className={`px-3 py-1.5 rounded-md transition-all ${sourceMetric === 'leads' ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
-                >
-                  לידים
-                </button>
-                <button
-                  onClick={() => setSourceMetric('revenue')}
-                  className={`px-3 py-1.5 rounded-md transition-all ${sourceMetric === 'revenue' ? 'bg-white dark:bg-slate-700 text-brand-600 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200'}`}
-                >
-                  הכנסות
-                </button>
+            {/* Summary */}
+            {sourcesData.length > 0 && (
+              <div className="px-5 pb-5 pt-3" style={{ borderTop: '1px solid #f1f5f9' }}>
+                <p className="text-[12px] text-center" style={{ color: '#64748b' }}>
+                  סה"כ: <span className="font-bold" style={{ color: '#0f172a' }}>
+                    {sourceMetric === 'revenue' ? `₪${totalSourcesValue.toLocaleString('he-IL')}` : totalSourcesValue}
+                  </span> {sourceMetric === 'leads' ? 'לידים' : 'הכנסות'}
+                </p>
               </div>
-            </div>
-
-            {/* Custom Chart List */}
-            <div className="px-6 pb-2 flex flex-col gap-4 flex-1">
-              {sourcesData.slice(0, 5).map((source, i) => {
-                const value = source[sourceMetric];
-                const percentage = totalSourcesValue > 0 ? Math.round((value / totalSourcesValue) * 100) : 0;
-                const widthPercentage = maxSourceValue > 0 ? Math.max((value / maxSourceValue) * 100, 5) : 0;
-
-                return (
-                  <div key={i} className="flex items-center gap-4 group">
-                    {/* Label (Right) */}
-                    <span className="w-32 text-sm font-medium text-slate-700 dark:text-slate-300 text-right truncate" title={source.name}>
-                      {{
-                        'Website': 'אתר אינטרנט',
-                        'Unknown': 'לא ידוע',
-                        'Webinar': 'וובינר',
-                        'LinkedIn': 'לינקדאין',
-                        'Facebook': 'פייסבוק',
-                        'Referral': 'הפניה',
-                        'Instagram': 'אינסטגרם'
-                      }[source.name] || source.name}
-                    </span>
-
-                    {/* Bar (Middle) */}
-                    <div className="flex-1 h-2.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex justify-end">
-                      <div
-                        className="h-full rounded-full transition-all duration-700 ease-out bg-brand-500 dark:bg-brand-400"
-                        style={{ width: `${widthPercentage}%`, opacity: isDarkMode ? 0.9 : 1 }}
-                      />
-                    </div>
-
-                    {/* Value (Left) */}
-                    <div className="w-28 text-left flex items-center justify-end gap-2">
-                      <span className="font-bold text-slate-900 dark:text-white tabular-nums text-base">
-                        {sourceMetric === 'revenue'
-                          ? `₪${value.toLocaleString('he-IL')}`
-                          : value}
-                      </span>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+            )}
           </div>
         </div>
 
-        {/* 4. Bottom Area: Unassigned/Risk */}
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* ═══════════════════════ BOTTOM: AT-RISK + UNASSIGNED ═══════════════════════ */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
-          {/* Right Card: Leads at Risk */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col h-full">
-            <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <AlertOctagon className="w-4 h-4 text-rose-500" />
-                <h2 className="font-bold text-slate-900 dark:text-white text-base">לידים בסיכון</h2>
+          {/* LEFT: Leads at Risk */}
+          <div className="bg-white rounded-lg overflow-hidden"
+            style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+
+            {/* Header */}
+            <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #f1f5f9' }}>
+              <div className="flex items-center gap-2.5">
+                <AlertOctagon className="w-4 h-4" style={{ color: '#d97706' }} strokeWidth={1.5} />
+                <div>
+                  <h2 className="text-[15px] font-semibold" style={{ color: '#0f172a' }}>לידים בסיכון</h2>
+                  {atRiskLeads.length > 0 && (
+                    <p className="text-[12px]" style={{ color: '#d97706' }}>דורש תשומת לב • {atRiskLeads.length} לידים</p>
+                  )}
+                </div>
               </div>
             </div>
 
-            <div className="p-4 space-y-3">
-              {atRiskLeads.map(lead => (
-                <div
-                  key={lead.id}
-                  onClick={() => setSelectedLead(lead)}
-                  className="p-3 hover:bg-rose-50/30 dark:hover:bg-rose-900/10 transition-colors cursor-pointer rounded-lg border border-slate-100 dark:border-slate-800"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">{lead.name}</h3>
-                      <p className="text-xs text-rose-600">אין פעילות זמן רב</p>
-                    </div>
-                    <Badge variant="warning" className="text-[10px]">{typeof lead.timeSinceActivity === 'string' ? lead.timeSinceActivity : 'זמן רב'}</Badge>
+            {/* Lead List */}
+            <div className="px-6">
+              {atRiskLeads.length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: '#d1fae5' }}>
+                    <CheckCircle2 className="w-5 h-5" style={{ color: '#059669' }} />
                   </div>
+                  <p className="text-[15px] font-semibold" style={{ color: '#0f172a' }}>אין לידים בסיכון</p>
+                  <p className="text-[13px] mt-1" style={{ color: '#94a3b8' }}>כל הלידים פעילים ומטופלים</p>
                 </div>
-              ))}
+              ) : (
+                atRiskLeads.map((lead, idx) => (
+                  <div
+                    key={lead.id}
+                    onClick={() => setSelectedLead(lead)}
+                    className="py-4 cursor-pointer group hover:bg-[#fafbfc] -mx-6 px-6 transition-colors"
+                    style={{ borderBottom: idx < atRiskLeads.length - 1 ? '1px solid #f1f5f9' : 'none' }}
+                  >
+                    <div className="flex justify-between items-center mb-1.5">
+                      <h3 className="text-[14px] font-semibold" style={{ color: '#0f172a' }}>{lead.name}</h3>
+                      <span
+                        className="text-[11px] font-semibold uppercase px-2 py-1 rounded"
+                        style={{ background: '#fef3c7', color: '#92400e', border: '1px solid #fde68a', letterSpacing: '0.3px' }}
+                      >
+                        {typeof lead.timeSinceActivity === 'string' ? lead.timeSinceActivity : 'זמן רב'}
+                      </span>
+                    </div>
+                    <p className="text-[12px] flex items-center gap-1" style={{ color: '#64748b' }}>
+                      <Clock className="w-3 h-3" /> אין פעילות זמן רב
+                    </p>
+                    <span
+                      className="text-[12px] font-medium flex items-center gap-1 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      style={{ color: '#2563eb' }}
+                    >
+                      פרטים <ArrowRight className="w-3 h-3" style={{ transform: 'rotate(180deg)' }} />
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
-          {/* Left Card: Unassigned Leads (Manager Only) */}
-          {!isRep && (
-            <div className="xl:col-span-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm flex flex-col h-full">
-              <div className="px-6 py-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Target className="w-4 h-4 text-amber-500" />
-                  <h2 className="font-bold text-slate-900 dark:text-white text-base">לידים לא מוקצים</h2>
+          {/* RIGHT: Unassigned Leads (Manager Only) or Quick Stats (Rep) */}
+          {!isRep ? (
+            <div className="bg-white rounded-lg overflow-hidden"
+              style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+
+              {/* Header */}
+              <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #f1f5f9' }}>
+                <div className="flex items-center gap-2.5">
+                  <UserPlus className="w-4 h-4" style={{ color: '#d97706' }} strokeWidth={1.5} />
+                  <div>
+                    <h2 className="text-[15px] font-semibold" style={{ color: '#0f172a' }}>לידים לא מוקצים</h2>
+                    {unassignedLeads.length > 0 && (
+                      <p className="text-[12px]" style={{ color: '#d97706' }}>דורש הקצאה • {unassignedLeads.length} לידים</p>
+                    )}
+                  </div>
                 </div>
               </div>
 
-              <div className="p-4 space-y-3">
+              {/* Lead List */}
+              <div className="px-6">
                 {unassignedLeads.length === 0 ? (
-                  <div className="text-center py-8 text-slate-400">אין לידים חדשים להקצאה</div>
+                  <div className="text-center py-12">
+                    <div className="w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center" style={{ background: '#d1fae5' }}>
+                      <CheckCircle2 className="w-5 h-5" style={{ color: '#059669' }} />
+                    </div>
+                    <p className="text-[15px] font-semibold" style={{ color: '#0f172a' }}>הכל מוקצה</p>
+                    <p className="text-[13px] mt-1" style={{ color: '#94a3b8' }}>אין לידים חדשים להקצאה</p>
+                  </div>
                 ) : (
-                  unassignedLeads.map(lead => (
-                    <div key={lead.id} className="p-3 bg-slate-50 dark:bg-slate-800/20 rounded-lg flex justify-between items-center">
-                      <span className="font-bold text-slate-900 dark:text-white">{lead.name}</span>
-                      <Badge variant="neutral">
-                        {{
-                          'website': 'אתר אינטרנט',
-                          'unknown': 'לא ידוע',
-                          'webinar': 'וובינר',
-                          'linkedin': 'לינקדאין',
-                          'facebook': 'פייסבוק',
-                          'referral': 'הפניה',
-                          'instagram': 'אינסטגרם'
-                        }[lead.source?.toLowerCase()?.trim()] || lead.source}
-                      </Badge>
+                  unassignedLeads.map((lead, idx) => (
+                    <div
+                      key={lead.id}
+                      onClick={() => setSelectedLead(lead)}
+                      className="py-4 cursor-pointer group hover:bg-[#fafbfc] -mx-6 px-6 transition-colors flex items-center justify-between"
+                      style={{ borderBottom: idx < unassignedLeads.length - 1 ? '1px solid #f1f5f9' : 'none' }}
+                    >
+                      <h3 className="text-[14px] font-semibold" style={{ color: '#0f172a' }}>{lead.name}</h3>
+                      <div className="flex items-center gap-3">
+                        <span
+                          className="text-[11px] font-semibold px-2.5 py-1 rounded"
+                          style={{ background: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1' }}
+                        >
+                          {sourceNameMap[lead.source || ''] || lead.source || 'לא ידוע'}
+                        </span>
+                        <span
+                          className="opacity-0 group-hover:opacity-100 transition-opacity text-[12px] font-medium flex items-center gap-1"
+                          style={{ color: '#2563eb' }}
+                        >
+                          הקצה <ArrowRight className="w-3 h-3" style={{ transform: 'rotate(180deg)' }} />
+                        </span>
+                      </div>
                     </div>
                   ))
                 )}
+              </div>
+            </div>
+          ) : (
+            /* Rep view: Quick Stats Grid */
+            <div className="bg-white rounded-lg overflow-hidden"
+              style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+              <div className="px-6 py-4 flex items-center gap-2.5" style={{ borderBottom: '1px solid #f1f5f9' }}>
+                <BarChart3 className="w-4 h-4" style={{ color: '#2563eb' }} strokeWidth={1.5} />
+                <h2 className="text-[15px] font-semibold" style={{ color: '#0f172a' }}>סטטיסטיקות מהירות</h2>
+              </div>
+              <div className="p-5 grid grid-cols-2 gap-3">
+                {[
+                  { label: 'נוצרו היום', value: stats?.newLeads?.current || 0 },
+                  { label: 'סגירה צפויה', value: stats?.closedDeals?.current || 0 },
+                  { label: 'בטיפול', value: stats?.leadsContacted?.current || 0 },
+                  { label: 'ממתינים', value: stats?.appointments?.current || 0 },
+                ].map((stat, i) => (
+                  <div key={i} className="rounded-md p-4 text-center hover:bg-white transition-all"
+                    style={{ background: '#f8fafc', border: '1px solid #e5e7eb' }}>
+                    <div className="text-[12px] font-medium mb-2" style={{ color: '#64748b' }}>{stat.label}</div>
+                    <div className="text-[28px] font-bold" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{stat.value}</div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
 
         </div>
 
-        {/* 5. Lead Details Drawer */}
+        {/* ═══════════════════════ LEAD DRAWER ═══════════════════════ */}
         <LeadDrawer
           lead={selectedLead}
           onClose={() => setSelectedLead(null)}
