@@ -141,74 +141,74 @@ export const NeedsAttentionCard: React.FC<NeedsAttentionCardProps> = ({ orgId })
       const ws = new WebSocket(`${protocol}//${window.location.host}/ws/manager?orgId=${orgId}&token=${encodeURIComponent(token)}`);
       wsRef.current = ws;
 
-    ws.onopen = () => {
-      setConnected(true);
-      ws.send(JSON.stringify({ type: 'get_alerts' }));
-      ws.send(JSON.stringify({ type: 'get_active_calls' }));
-    };
+      ws.onopen = () => {
+        setConnected(true);
+        ws.send(JSON.stringify({ type: 'get_alerts' }));
+        ws.send(JSON.stringify({ type: 'get_active_calls' }));
+      };
 
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
 
-        switch (msg.type) {
-          case 'monitor_connected':
-            setAlerts(msg.activeAlerts || []);
-            break;
+          switch (msg.type) {
+            case 'monitor_connected':
+              setAlerts(msg.activeAlerts || []);
+              break;
 
-          case 'attention_alert':
-            setAlerts(prev => {
-              const existing = prev.findIndex(a => a.id === msg.alert.id);
-              if (existing >= 0) {
-                const updated = [...prev];
-                updated[existing] = msg.alert;
-                return updated;
+            case 'attention_alert':
+              setAlerts(prev => {
+                const existing = prev.findIndex(a => a.id === msg.alert.id);
+                if (existing >= 0) {
+                  const updated = [...prev];
+                  updated[existing] = msg.alert;
+                  return updated;
+                }
+                return [msg.alert, ...prev];
+              });
+              break;
+
+            case 'attention_resolved':
+            case 'attention_ended':
+              setAlerts(prev => prev.filter(a => a.callSid !== msg.callSid));
+              if (msg.type === 'attention_ended') {
+                setActiveCalls(prev => prev.filter(c => c.callSid !== msg.callSid));
               }
-              return [msg.alert, ...prev];
-            });
-            break;
+              break;
 
-          case 'attention_resolved':
-          case 'attention_ended':
-            setAlerts(prev => prev.filter(a => a.callSid !== msg.callSid));
-            if (msg.type === 'attention_ended') {
-              setActiveCalls(prev => prev.filter(c => c.callSid !== msg.callSid));
-            }
-            break;
+            case 'attention_dismissed':
+              setAlerts(prev => prev.filter(a => a.callSid !== msg.callSid));
+              break;
 
-          case 'attention_dismissed':
-            setAlerts(prev => prev.filter(a => a.callSid !== msg.callSid));
-            break;
+            case 'alerts_list':
+              setAlerts(msg.alerts || []);
+              break;
 
-          case 'alerts_list':
-            setAlerts(msg.alerts || []);
-            break;
+            case 'active_calls':
+              setActiveCalls(msg.calls || []);
+              break;
 
-          case 'active_calls':
-            setActiveCalls(msg.calls || []);
-            break;
+            case 'call_update':
+              setActiveCalls(prev => {
+                const idx = prev.findIndex(c => c.callSid === msg.callSid);
+                if (idx >= 0) {
+                  const updated = [...prev];
+                  updated[idx] = { ...updated[idx], lastScore: msg.score, currentStage: msg.stage, alertLevel: msg.alertLevel };
+                  return updated;
+                }
+                return [...prev, { callSid: msg.callSid, agentName: msg.agentName, agentId: '', leadName: '', currentStage: msg.stage, lastScore: msg.score, alertLevel: msg.alertLevel, duration: 0 }];
+              });
+              break;
+          }
+        } catch (e) { }
+      };
 
-          case 'call_update':
-            setActiveCalls(prev => {
-              const idx = prev.findIndex(c => c.callSid === msg.callSid);
-              if (idx >= 0) {
-                const updated = [...prev];
-                updated[idx] = { ...updated[idx], lastScore: msg.score, currentStage: msg.stage, alertLevel: msg.alertLevel };
-                return updated;
-              }
-              return [...prev, { callSid: msg.callSid, agentName: msg.agentName, agentId: '', leadName: '', currentStage: msg.stage, lastScore: msg.score, alertLevel: msg.alertLevel, duration: 0 }];
-            });
-            break;
-        }
-      } catch (e) {}
-    };
+      ws.onclose = () => {
+        setConnected(false);
+        reconnectTimeout.current = setTimeout(connectWS, 3000);
+      };
 
-    ws.onclose = () => {
-      setConnected(false);
-      reconnectTimeout.current = setTimeout(connectWS, 3000);
-    };
-
-    ws.onerror = () => ws.close();
+      ws.onerror = () => ws.close();
     } catch (err) {
       console.error('[Manager WS] Connection error:', err);
     }
@@ -252,16 +252,16 @@ export const NeedsAttentionCard: React.FC<NeedsAttentionCardProps> = ({ orgId })
           className="w-full px-5 py-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
         >
           <div className="flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-lg flex items-center justify-center relative ${totalAlerts > 0 ? 'bg-red-50 dark:bg-red-950/30' : 'bg-rose-50 dark:bg-rose-950/30'}`}>
-              <AlertTriangle className={`w-5 h-5 ${totalAlerts > 0 ? 'text-red-600 dark:text-red-400' : 'text-rose-600 dark:text-rose-400'}`} />
+            <div className={`w-9 h-9 rounded-lg flex items-center justify-center relative ${totalAlerts > 0 ? 'bg-amber-50 dark:bg-amber-950/30' : 'bg-slate-50 dark:bg-slate-800'}`}>
+              <AlertTriangle className={`w-5 h-5 ${totalAlerts > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'}`} />
               {criticalCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-ping opacity-75" />
+                <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-500 rounded-full animate-ping opacity-75" />
               )}
             </div>
             <h3 className="font-bold text-slate-900 dark:text-white text-sm">דורש תשומת לב</h3>
             <div className="flex items-center gap-1.5">
               {totalAlerts > 0 && (
-                <span className="text-xs font-bold bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-2 py-0.5 rounded-full">
+                <span className="text-xs font-bold bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full">
                   {totalAlerts}
                 </span>
               )}
@@ -387,19 +387,17 @@ export const NeedsAttentionCard: React.FC<NeedsAttentionCardProps> = ({ orgId })
                         className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/50 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                       >
                         <div className="flex items-center gap-2">
-                          <div className={`w-1.5 h-1.5 rounded-full ${
-                            call.alertLevel === 'critical' ? 'bg-red-500 animate-pulse' :
-                            call.alertLevel === 'high' ? 'bg-orange-500' :
-                            call.alertLevel === 'medium' ? 'bg-amber-500' :
-                            'bg-emerald-500'
-                          }`} />
+                          <div className={`w-1.5 h-1.5 rounded-full ${call.alertLevel === 'critical' ? 'bg-red-500 animate-pulse' :
+                              call.alertLevel === 'high' ? 'bg-orange-500' :
+                                call.alertLevel === 'medium' ? 'bg-amber-500' :
+                                  'bg-emerald-500'
+                            }`} />
                           <span className="text-xs font-medium text-slate-700 dark:text-slate-300">{call.agentName}</span>
                           {call.lastScore != null && (
-                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
-                              call.lastScore < 40 ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' :
-                              call.lastScore < 60 ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' :
-                              'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'
-                            }`}>{call.lastScore}</span>
+                            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${call.lastScore < 40 ? 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' :
+                                call.lastScore < 60 ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' :
+                                  'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'
+                              }`}>{call.lastScore}</span>
                           )}
                         </div>
                         <button

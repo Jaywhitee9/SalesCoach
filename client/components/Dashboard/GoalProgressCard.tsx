@@ -71,7 +71,7 @@ export const GoalProgressCard: React.FC<GoalProgressProps> = ({ teamProgress, lo
                 </div>
 
                 {/* Progress Bar */}
-                <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#e5e7eb' }}>
+                <div className="h-1 rounded-full overflow-hidden" style={{ background: '#e5e7eb' }}>
                   <div
                     className="h-full rounded-full transition-all duration-700"
                     style={{ width: `${Math.min(100, goal.percentage)}%`, backgroundColor: barColor }}
@@ -88,7 +88,7 @@ export const GoalProgressCard: React.FC<GoalProgressProps> = ({ teamProgress, lo
                       `עוד ${goal.target - goal.current}`
                     )}
                   </span>
-                  <span className="text-[11px] font-semibold" style={{ color: barColor, fontVariantNumeric: 'tabular-nums' }}>
+                  <span className="text-[12px] font-bold" style={{ color: barColor, fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}>
                     {goal.percentage}%
                   </span>
                 </div>

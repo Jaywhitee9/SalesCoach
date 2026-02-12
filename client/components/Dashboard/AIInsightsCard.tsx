@@ -63,10 +63,12 @@ export const AIInsightsCard: React.FC<AIInsightsCardProps> = ({ insights, loadin
             <span className="text-[13px]" style={{ color: '#94a3b8' }}>טוען...</span>
           </div>
         ) : insights.length === 0 ? (
-          <div className="text-center py-8">
-            <Lightbulb className="w-6 h-6 mx-auto mb-2" style={{ color: '#d1d5db' }} strokeWidth={1.5} />
-            <p className="text-[13px] font-medium" style={{ color: '#64748b' }}>הכל תקין</p>
-            <p className="text-[12px] mt-0.5" style={{ color: '#94a3b8' }}>אין המלצות כרגע</p>
+          <div className="text-center py-10">
+            <div className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center" style={{ background: '#d1fae5' }}>
+              <Lightbulb className="w-5 h-5" style={{ color: '#059669' }} strokeWidth={1.5} />
+            </div>
+            <p className="text-[15px] font-semibold" style={{ color: '#0f172a' }}>הכל תקין</p>
+            <p className="text-[13px] mt-2 leading-relaxed" style={{ color: '#64748b' }}>אין המלצות פעולה בזמן זה</p>
           </div>
         ) : (
           <div className="space-y-2">

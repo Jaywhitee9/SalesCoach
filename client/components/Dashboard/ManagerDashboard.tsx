@@ -265,6 +265,12 @@ const ManagerDashboardInner: React.FC<ManagerDashboardProps> = ({ isDarkMode, or
     { icon: Award, color: '#94a3b8' },
   ];
 
+  const hasMeaningfulTrend = (trend?: string) => {
+    if (!trend) return false;
+    const cleaned = trend.replace(/[+\-%]/g, '').trim();
+    return cleaned !== '0' && cleaned !== '';
+  };
+
   const getTrendIcon = (dir: string) => {
     if (dir === 'up') return <ArrowUpRight className="w-3 h-3" />;
     if (dir === 'down') return <ArrowDownRight className="w-3 h-3" />;
@@ -401,20 +407,21 @@ const ManagerDashboardInner: React.FC<ManagerDashboardProps> = ({ isDarkMode, or
                 <div
                   key={index}
                   className="bg-white rounded-lg p-5 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition-all duration-200 cursor-default"
-                  style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
+                  style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.03), 0 1px 3px rgba(0,0,0,0.02)' }}
                 >
-                  <KpiIcon className="w-5 h-5 mb-4" style={{ color: config.color }} strokeWidth={1.5} />
-                  <div className="text-[40px] font-bold leading-none" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <KpiIcon className="w-[18px] h-[18px]" style={{ color: config.color, opacity: 0.6 }} strokeWidth={1.5} />
+                    {hasMeaningfulTrend(kpi.trend) && (
+                      <span className="text-[11px] font-semibold flex items-center gap-0.5" style={{ color: getTrendColor(kpi.trendDirection || 'neutral') }}>
+                        {getTrendIcon(kpi.trendDirection || 'neutral')}
+                        {kpi.trend}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[48px] font-bold leading-none" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}>
                     {kpi.value}
                   </div>
                   <div className="text-[13px] font-medium mt-2" style={{ color: '#64748b' }}>{kpi.label}</div>
-                  <div className="flex items-center gap-1 mt-1.5">
-                    <span className="text-[12px] font-medium flex items-center gap-0.5" style={{ color: getTrendColor(kpi.trendDirection || 'neutral') }}>
-                      {getTrendIcon(kpi.trendDirection || 'neutral')}
-                      {kpi.trend || ''}
-                    </span>
-                    <span className="text-[12px]" style={{ color: '#94a3b8' }}>{kpi.subtext}</span>
-                  </div>
                 </div>
               );
             })}
@@ -452,7 +459,7 @@ const ManagerDashboardInner: React.FC<ManagerDashboardProps> = ({ isDarkMode, or
               </button>
               {!expandedSections.pipeline && (
                 <div className="px-5 pb-4">
-                  <span className="text-[28px] font-bold ltr" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>₪{funnelData.reduce((s, f) => s + (f.value || 0), 0).toLocaleString()}</span>
+                  <span className="text-[36px] font-bold ltr" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}>₪{funnelData.reduce((s, f) => s + (f.value || 0), 0).toLocaleString()}</span>
                   <p className="text-[12px] mt-0.5" style={{ color: '#94a3b8' }}>סה"כ בפייפליין</p>
                 </div>
               )}
@@ -488,7 +495,7 @@ const ManagerDashboardInner: React.FC<ManagerDashboardProps> = ({ isDarkMode, or
               </button>
               {!expandedSections.team && (
                 <div className="px-5 pb-4">
-                  <span className="text-[28px] font-bold" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{teamMembers.length}</span>
+                  <span className="text-[36px] font-bold" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}>{teamMembers.length}</span>
                   <p className="text-[12px] mt-0.5" style={{ color: '#94a3b8' }}>נציגים פעילים</p>
                 </div>
               )}
