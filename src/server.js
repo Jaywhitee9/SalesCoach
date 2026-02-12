@@ -23,6 +23,8 @@ fastify.register(require('./routes/token-handler'));
 fastify.register(require('./routes/client-socket'));
 fastify.register(require('./routes/leads-handler')); // P0: Lead status & activities
 fastify.register(require('./routes/admin-handler')); // Super Admin API
+fastify.register(require('./routes/dashboard-preferences-handler')); // Dashboard customization
+fastify.register(require('./routes/manager-socket')); // Manager real-time monitoring
 
 // Health Check
 fastify.get('/health', async (request, reply) => {

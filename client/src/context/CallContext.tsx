@@ -7,6 +7,20 @@ export interface CallSummaryData {
     summary: string;
     score: number;
     success: boolean;
+    score_breakdown?: Record<string, number>;
+    deal_amount?: number;
+    is_success?: boolean;
+    key_moments?: {
+        type: string;
+        description: string;
+        impact: 'positive' | 'negative';
+    }[];
+    micro_lesson?: {
+        weak_area: string;
+        title: string;
+        tip: string;
+        example_phrase?: string;
+    };
 }
 
 interface CoachingData {
@@ -218,6 +232,10 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const wsRef = useRef<WebSocket | null>(null);
     const timerRef = useRef<NodeJS.Timeout | null>(null);
+    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const [reconnectAttempt, setReconnectAttempt] = useState(0);
+    const [isReconnecting, setIsReconnecting] = useState(false);
+    const lastMessageTimeRef = useRef<number>(Date.now());
 
     // Initialize Twilio Device
     const initDevice = async () => {
@@ -451,18 +469,39 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         fetchHistory();
     }, [activeLeadId]);
 
-    // WebSocket Logic
+    // WebSocket Logic with Auto-Reconnection
     const connectWS = (callSid: string) => {
+        // Clear existing connection if any
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
+            console.log('[WS] Already connected');
+            return;
+        }
+
         const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const wsUrl = `${proto}//${window.location.host}/ws/coach?callSid=${callSid}`;
 
-        wsRef.current = new WebSocket(wsUrl);
+        console.log(`[WS] Connecting to: ${wsUrl} (attempt ${reconnectAttempt + 1})`);
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
 
-        wsRef.current.onopen = () => console.log('WS Connected');
+        ws.onopen = () => {
+            console.log('[WS] ✅ Connected successfully');
+            setIsReconnecting(false);
+            setReconnectAttempt(0);
+            
+            // Request missed messages since last known time
+            if (reconnectAttempt > 0) {
+                ws.send(JSON.stringify({ 
+                    type: 'sync_request', 
+                    since: lastMessageTimeRef.current 
+                }));
+            }
+        };
 
-        wsRef.current.onmessage = (event) => {
+        ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
+                lastMessageTimeRef.current = Date.now();
 
                 if (data.type === 'transcript') {
                     const isFinal = data.isFinal === true;
@@ -683,9 +722,39 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             }
         };
 
-        wsRef.current.onerror = (e) => console.error('WS Error', e);
-        wsRef.current.onclose = () => console.log('WS Closed');
+        ws.onerror = (error) => {
+            console.error('[WS] ❌ Error:', error);
+        };
+
+        ws.onclose = (event) => {
+            console.log(`[WS] 🔌 Closed (${event.code}: ${event.reason || 'No reason'})`);
+            
+            // Auto-reconnect with exponential backoff (if not clean close and call is still active)
+            if (!event.wasClean && reconnectAttempt < 10 && isOnCall) {
+                const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), 30000); // Max 30s
+                console.log(`[WS] 🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempt + 1})`);
+                
+                setIsReconnecting(true);
+                reconnectTimeoutRef.current = setTimeout(() => {
+                    setReconnectAttempt(prev => prev + 1);
+                    connectWS(callSid);
+                }, delay);
+            } else if (reconnectAttempt >= 10) {
+                console.error('[WS] ⚠️ Max reconnection attempts reached');
+                alert('אובדן חיבור למערכת. אנא רענן את הדף.');
+                setIsReconnecting(false);
+            }
+        };
     };
+
+    // Cleanup reconnection timeout on unmount
+    useEffect(() => {
+        return () => {
+            if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
+            }
+        };
+    }, []);
 
 
     const startCall = async (phone: string, agentId?: string, leadId?: string) => {

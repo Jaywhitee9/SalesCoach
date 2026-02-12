@@ -9,6 +9,10 @@
       "DOM",
       "DOM.Iterable"
     ],
+    "typeRoots": [
+      "./types",
+      "./node_modules/@types"
+    ],
     "skipLibCheck": true,
     "types": [
       "node"

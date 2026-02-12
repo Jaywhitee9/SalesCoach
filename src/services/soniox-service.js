@@ -52,9 +52,15 @@ class SonioxService {
 
         // Audio Buffer for pre-connection packets
         let audioBuffer = [];
+        
+        // Reconnection state
+        let reconnectAttempts = 0;
+        let reconnectTimeout = null;
+        let isClosed = false;
 
         ws.on('open', () => {
-            console.log(`[Soniox] Opening stream for ${callSid} (${track}) using model: ${config.model}`);
+            console.log(`[Soniox] ✅ Opening stream for ${callSid} (${track}) using model: ${config.model}`);
+            reconnectAttempts = 0; // Reset on successful connection
             ws.send(JSON.stringify(config));
 
             // Flush buffer
@@ -69,11 +75,7 @@ class SonioxService {
             }
         });
 
-        // ... existing 'message' handler ...
-
         ws.on('message', (data) => {
-            // ... existing code ...
-            // (Copy existing message handler entirely or ensure checking line numbers closely)
             try {
                 const response = JSON.parse(data);
 
@@ -101,9 +103,6 @@ class SonioxService {
                 if (nonFinalTokens.length > 0) {
                     let partialText = nonFinalTokens.map(t => t.text).join("").replace(/<end>/gi, '').trim();
 
-                    // DEBUG: Check for excessive duplication
-                    // if (partialText.length > 50) console.log(`[Soniox-Debug] Raw Partial: "${partialText}"`);
-
                     if (partialText && partialText.length > 0) {
                         if (partialText === lastPartialText) return;
                         lastPartialText = partialText;
@@ -115,13 +114,39 @@ class SonioxService {
             }
         });
 
-        // ... existing 'error' and 'close' handlers ...
         ws.on('error', (err) => {
-            console.error(`[Soniox] Error for ${callSid} (${track}):`, err.message);
+            console.error(`[Soniox] ❌ Error for ${callSid} (${track}):`, err.message);
         });
 
-        ws.on('close', () => {
-            console.log(`[Soniox] Closed for ${callSid} (${track})`);
+        ws.on('close', (code, reason) => {
+            console.log(`[Soniox] 🔌 Closed for ${callSid} (${track}): ${code} - ${reason || 'No reason'}`);
+            
+            // Auto-reconnect if call is still active (check with CallManager)
+            if (!isClosed && reconnectAttempts < 5) {
+                const CallManager = require('./call-manager');
+                const call = CallManager.calls.get(callSid);
+                
+                if (call && call.sonioxSockets) {
+                    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 10000); // Max 10s
+                    console.log(`[Soniox] 🔄 Reconnecting ${track} in ${delay}ms (attempt ${reconnectAttempts + 1})`);
+                    
+                    reconnectTimeout = setTimeout(() => {
+                        reconnectAttempts++;
+                        const newSession = this.createSession(callSid, track, onTranscript);
+                        
+                        // Replace the socket in CallManager
+                        if (track === 'inbound') {
+                            call.sonioxSockets.inbound = newSession;
+                        } else {
+                            call.sonioxSockets.outbound = newSession;
+                        }
+                    }, delay);
+                } else {
+                    console.log(`[Soniox] Call ${callSid} no longer active, not reconnecting ${track}`);
+                }
+            } else if (reconnectAttempts >= 5) {
+                console.error(`[Soniox] ⚠️ Max reconnection attempts reached for ${callSid} (${track})`);
+            }
         });
 
         return {
@@ -130,10 +155,18 @@ class SonioxService {
                     ws.send(audioPayload);
                 } else if (ws.readyState === WebSocket.CONNECTING) {
                     audioBuffer.push(audioPayload);
+                    // Limit buffer size to prevent memory issues
+                    if (audioBuffer.length > 100) {
+                        audioBuffer.shift(); // Remove oldest
+                    }
                 }
             },
             close: () => {
-                if (ws.readyState === WebSocket.OPEN) {
+                isClosed = true; // Prevent reconnection
+                if (reconnectTimeout) {
+                    clearTimeout(reconnectTimeout);
+                }
+                if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
                     ws.close();
                 }
             }

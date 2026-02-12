@@ -48,6 +48,15 @@
   }
 }
 
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
 /* Custom Fonts */
 @font-face {
   font-family: 'FUP Galil';
@@ -424,4 +433,101 @@ body {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* === REACT-GRID-LAYOUT === */
+
+/* Grid item base */
+.react-grid-item {
+  transition: all 200ms ease;
+  transition-property: left, top, width, height;
+}
+
+.react-grid-item.cssTransforms {
+  transition-property: transform, width, height;
+}
+
+.react-grid-item.react-draggable-dragging {
+  transition: none;
+  z-index: 100;
+  opacity: 0.92;
+  box-shadow: 0 20px 40px -8px rgba(99, 102, 241, 0.25);
+}
+
+.react-grid-item.resizing {
+  transition: none;
+  z-index: 100;
+}
+
+/* Resize handle: bottom-left for RTL (mirrored X coords place widget origin at right) */
+.react-grid-item > .react-resizable-handle {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  bottom: 0;
+  left: 0;
+  cursor: sw-resize;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.edit-mode .react-grid-item > .react-resizable-handle {
+  opacity: 1;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  bottom: 3px;
+  width: 8px;
+  height: 8px;
+  border-left: 2px solid rgba(99, 102, 241, 0.5);
+  border-bottom: 2px solid rgba(99, 102, 241, 0.5);
+}
+
+.react-grid-placeholder {
+  background: rgba(99, 102, 241, 0.12) !important;
+  border: 2px dashed rgba(99, 102, 241, 0.35) !important;
+  border-radius: 12px !important;
+  opacity: 1 !important;
+}
+
+/* Edit mode: dot grid background + subtle border */
+.dashboard-grid-container.edit-mode {
+  background-image: radial-gradient(circle, #cbd5e1 1px, transparent 1px);
+  background-size: 24px 24px;
+  border-radius: 16px;
+  border: 1px dashed #cbd5e1;
+  padding: 8px;
+  min-height: 400px;
+  transition: background-image 0.3s ease, border-color 0.3s ease;
+}
+
+.dark .dashboard-grid-container.edit-mode {
+  background-image: radial-gradient(circle, #334155 1px, transparent 1px);
+  border-color: #334155;
+}
+
+/* Dashboard grid item cards */
+.dashboard-grid-item {
+  height: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  background: white;
+  border: 1px solid #e2e8f0;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.dark .dashboard-grid-item {
+  background: #0f172a;
+  border-color: #1e293b;
+}
+
+.dashboard-grid-item:hover {
+  box-shadow: 0 4px 12px -4px rgba(0, 0, 0, 0.08);
+}
+
+.edit-mode .dashboard-grid-item {
+  border-color: rgba(99, 102, 241, 0.3);
 }

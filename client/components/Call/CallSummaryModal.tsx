@@ -14,7 +14,13 @@ import {
   Zap,
   Volume2,
   Play,
-  Pause
+  Pause,
+  DollarSign,
+  Target,
+  TrendingUp,
+  AlertTriangle,
+  BookOpen,
+  Award
 } from 'lucide-react';
 import { Button } from '../Common/Button';
 import { DateTimePicker } from '../Common/DateTimePicker';
@@ -48,7 +54,7 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
     dialNextLead
   } = useCall();
 
-  const [activeTab, setActiveTab] = useState<'summary' | 'transcript'>('summary');
+  const [activeTab, setActiveTab] = useState<'summary' | 'moments' | 'transcript'>('summary');
   const [outcome, setOutcome] = useState<string | null>(null);
   const [followUpDate, setFollowUpDate] = useState<Date | null>(() => {
     const tomorrow = new Date();
@@ -61,6 +67,9 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
   const [showFollowUpForm, setShowFollowUpForm] = useState(false);
   const [showNotRelevantForm, setShowNotRelevantForm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [dealAmount, setDealAmount] = useState<number | null>(null);
+  const [debriefCompleted, setDebriefCompleted] = useState(false);
+  const [debriefLoading, setDebriefLoading] = useState(false);
 
   // Recording playback state
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
@@ -79,6 +88,9 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
       setNotRelevantReason('');
       setShowFollowUpForm(false);
       setShowNotRelevantForm(false);
+      setDealAmount(null);
+      setDebriefCompleted(false);
+      setDebriefLoading(false);
 
       // Reset lead name to prop value first, will fetch if needed
       setLeadName(propLeadName);
@@ -90,6 +102,13 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
       setFollowUpDate(tomorrow);
     }
   }, [showSummaryModal]);
+
+  // Initialize deal amount from AI summary
+  useEffect(() => {
+    if (callSummary?.deal_amount && typeof callSummary.deal_amount === 'number') {
+      setDealAmount(callSummary.deal_amount);
+    }
+  }, [callSummary]);
 
   // Fetch real lead name from database
   useEffect(() => {
@@ -166,7 +185,7 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
     if (!outcome) return;
 
     setIsSaving(true);
-    console.log('[Summary] Saving outcome:', outcome, { followUpDate, followUpNotes, callSessionId, leadId });
+    console.log('[Summary] Saving outcome:', outcome, { followUpDate, followUpNotes, callSessionId, leadId, dealAmount });
 
     try {
       // Save to backend API
@@ -178,14 +197,15 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
           followUpAt: followUpDate ? followUpDate.toISOString() : null,
           notes: outcome === 'not_relevant' ? notRelevantReason : (followUpNotes || null),
           callSessionId,
-          summaryJson: callSummary
+          summaryJson: callSummary,
+          dealAmount: dealAmount // Include deal amount
         })
       });
 
       if (!response.ok) {
         console.error('[Summary] Failed to save:', await response.text());
       } else {
-        console.log('[Activity] inserted:', { type: outcome, leadId });
+        console.log('[Activity] inserted:', { type: outcome, leadId, dealAmount });
       }
     } catch (err) {
       console.error('[Summary] Save error:', err);
@@ -200,7 +220,7 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
     if (!outcome) return;
 
     setIsSaving(true);
-    console.log('[Summary] Saving outcome and dialing next:', outcome);
+    console.log('[Summary] Saving outcome and dialing next:', outcome, { dealAmount });
 
     try {
       // Save to backend API
@@ -212,14 +232,15 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
           followUpAt: followUpDate ? followUpDate.toISOString() : null,
           notes: outcome === 'not_relevant' ? notRelevantReason : (followUpNotes || null),
           callSessionId,
-          summaryJson: callSummary
+          summaryJson: callSummary,
+          dealAmount: dealAmount // Include deal amount
         })
       });
 
       if (!response.ok) {
         console.error('[Summary] Failed to save:', await response.text());
       } else {
-        console.log('[Activity] inserted:', { type: outcome, leadId });
+        console.log('[Activity] inserted:', { type: outcome, leadId, dealAmount });
       }
     } catch (err) {
       console.error('[Summary] Save error:', err);
@@ -302,6 +323,18 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
             <Sparkles className="w-4 h-4" />
             סיכום
           </button>
+          {callSummary?.key_moments?.length > 0 && (
+            <button
+              onClick={() => setActiveTab('moments')}
+              className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'moments'
+                ? 'text-brand-600 border-b-2 border-brand-600 bg-brand-50/50 dark:bg-brand-900/10'
+                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                }`}
+            >
+              <Target className="w-4 h-4" />
+              רגעי מפתח ({callSummary.key_moments.length})
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('transcript')}
             className={`flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors ${activeTab === 'transcript'
@@ -379,6 +412,79 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
                 </div>
               )}
 
+              {/* Micro-Lesson Card */}
+              {summaryStatus === 'ready' && callSummary?.micro_lesson && (
+                <div className="relative group">
+                  <div className="absolute -inset-0.5 bg-gradient-to-r from-amber-400 to-orange-500 rounded-xl opacity-20 group-hover:opacity-30 transition duration-500 blur"></div>
+                  <div className="relative bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-xl p-4 border border-amber-200 dark:border-amber-800">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-8 h-8 bg-gradient-to-br from-amber-500 to-orange-500 rounded-lg flex items-center justify-center">
+                        <BookOpen className="w-4 h-4 text-white" />
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-bold text-amber-800 dark:text-amber-300">
+                          {callSummary.micro_lesson.title}
+                        </h3>
+                        <span className="text-xs text-amber-600 dark:text-amber-400">
+                          תחום: {callSummary.micro_lesson.weak_area}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed mb-3">
+                      {callSummary.micro_lesson.tip}
+                    </p>
+                    {callSummary.micro_lesson.example_phrase && (
+                      <div className="bg-white/70 dark:bg-slate-800/70 rounded-lg p-3 border border-amber-200/50 dark:border-amber-700/30">
+                        <span className="text-xs font-bold text-amber-600 dark:text-amber-400 block mb-1">משפט לדוגמה:</span>
+                        <p className="text-sm text-slate-800 dark:text-slate-200 italic">
+                          &ldquo;{callSummary.micro_lesson.example_phrase}&rdquo;
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Debrief Complete Button */}
+                    {!debriefCompleted ? (
+                      <button
+                        onClick={async () => {
+                          setDebriefLoading(true);
+                          try {
+                            const { data: { session } } = await supabase.auth.getSession();
+                            const token = session?.access_token;
+                            const res = await fetch(`/api/debrief/${callSessionId}/complete`, {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                              },
+                              body: '{}'
+                            });
+                            const data = await res.json();
+                            if (res.ok && data.xpAwarded > 0) setDebriefCompleted(true);
+                          } catch (e) {
+                            console.error('[Debrief] XP error:', e);
+                          }
+                          setDebriefLoading(false);
+                        }}
+                        disabled={debriefLoading}
+                        className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold text-sm transition-all shadow-md hover:shadow-lg"
+                      >
+                        {debriefLoading ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Award className="w-4 h-4" />
+                        )}
+                        סימנתי, הבנתי (+10 XP)
+                      </button>
+                    ) : (
+                      <div className="mt-3 w-full flex items-center justify-center gap-2 py-2.5 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-bold text-sm border border-emerald-200 dark:border-emerald-800">
+                        <CheckCircle2 className="w-4 h-4" />
+                        +10 XP!
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* Outcome Selection */}
               <div>
                 <label className="text-sm font-bold text-slate-900 dark:text-white mb-3 block">מה הסטטוס?</label>
@@ -398,6 +504,39 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
                   ))}
                 </div>
               </div>
+
+              {/* Deal Amount Field - Show if AI detected amount or if deal_closed selected */}
+              {(dealAmount !== null || outcome === 'deal_closed') && (
+                <div className="bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 rounded-xl p-5 border border-emerald-200 dark:border-emerald-800 space-y-3 animate-in slide-in-from-top-2">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center">
+                      <DollarSign className="w-4 h-4 text-white" />
+                    </div>
+                    <span className="text-sm font-bold text-emerald-700 dark:text-emerald-300">סכום העסקה</span>
+                    {callSummary?.deal_amount && (
+                      <span className="text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/30 px-2 py-0.5 rounded-full">
+                        זוהה אוטומטית
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={dealAmount ?? ''}
+                      onChange={(e) => setDealAmount(e.target.value ? Number(e.target.value) : null)}
+                      placeholder="הזן סכום בשקלים..."
+                      className="w-full rounded-xl border-2 border-emerald-200 dark:border-emerald-700 p-3 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-all text-right placeholder:text-slate-400 text-lg font-semibold"
+                    />
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm">₪</span>
+                  </div>
+                  
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-start gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>סכום זה יעדכן אוטומטית את ערך הליד בדשבורד ובדוחות הפייפליין</span>
+                  </p>
+                </div>
+              )}
 
               {/* Follow Up Form - Premium Design */}
               {showFollowUpForm && (
@@ -452,6 +591,52 @@ export const CallSummaryModal: React.FC<CallSummaryModalProps> = ({
                 </div>
               )}
             </>
+          )}
+
+          {activeTab === 'moments' && callSummary?.key_moments && (
+            <div className="space-y-4">
+              <div className="relative pr-4">
+                <div className="absolute right-1.5 top-0 bottom-0 w-0.5 bg-slate-200 dark:bg-slate-700"></div>
+                {callSummary.key_moments.map((moment: any, idx: number) => {
+                  const isPositive = moment.impact === 'positive';
+                  const iconBg = isPositive
+                    ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/40 dark:text-emerald-400 border-emerald-300 dark:border-emerald-700'
+                    : 'bg-rose-100 text-rose-600 dark:bg-rose-900/40 dark:text-rose-400 border-rose-300 dark:border-rose-700';
+                  const cardBorder = isPositive
+                    ? 'border-emerald-200 dark:border-emerald-800/50'
+                    : 'border-rose-200 dark:border-rose-800/50';
+
+                  return (
+                    <div key={idx} className="relative flex gap-3 items-start mb-4 last:mb-0 animate-in slide-in-from-right-3 duration-300" style={{ animationDelay: `${idx * 120}ms` }}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border ${iconBg} z-10`}>
+                        {isPositive ? (
+                          <TrendingUp className="w-4 h-4" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4" />
+                        )}
+                      </div>
+                      <div className={`flex-1 bg-white dark:bg-slate-900 rounded-xl p-3.5 border ${cardBorder} shadow-sm`}>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isPositive
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400'
+                            : 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400'
+                          }`}>
+                            {moment.type === 'turning_point' ? 'נקודת מפנה'
+                              : moment.type === 'missed_opportunity' ? 'הזדמנות שהוחמצה'
+                              : moment.type === 'objection_handled' ? 'התנגדות טופלה'
+                              : moment.type === 'great_question' ? 'שאלה מצוינת'
+                              : moment.type}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
+                          {moment.description}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
 
           {activeTab === 'transcript' && (

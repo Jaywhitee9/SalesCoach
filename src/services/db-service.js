@@ -1,4 +1,5 @@
 const supabase = require('../lib/supabase'); // Corrected Path
+const { dashboardCache } = require('../utils/cache.js');
 
 class DBService {
 
@@ -76,6 +77,15 @@ class DBService {
             let data = null;
             let error = null;
 
+            // Prepare accumulated signals for storage
+            const accumulatedSignals = callData.accumulatedSignals || { pains: [], objections: [], gaps: [], vision: [] };
+            console.log(`[Supabase] Saving accumulated signals:`, {
+                pains: accumulatedSignals.pains?.length || 0,
+                objections: accumulatedSignals.objections?.length || 0,
+                gaps: accumulatedSignals.gaps?.length || 0,
+                vision: accumulatedSignals.vision?.length || 0
+            });
+
             // Attempt 1: Match by sid:CallSid
             const result1 = await supabase
                 .from('calls')
@@ -84,6 +94,7 @@ class DBService {
                     duration: Math.floor((Date.now() - callData.startTime) / 1000),
                     transcript: callData.transcripts,
                     coaching_tips: callData.coachingHistory || [],
+                    accumulated_signals: accumulatedSignals,
                 })
                 .eq('recording_url', recordingUrlToMatch)
                 .select()
@@ -104,6 +115,7 @@ class DBService {
                         duration: Math.floor((Date.now() - callData.startTime) / 1000),
                         transcript: callData.transcripts,
                         coaching_tips: callData.coachingHistory || [],
+                        accumulated_signals: accumulatedSignals,
                     })
                     .eq('lead_id', callData.leadId)
                     .eq('agent_id', callData.agentId)
@@ -133,6 +145,7 @@ class DBService {
                     duration: Math.floor((Date.now() - callData.startTime) / 1000),
                     transcript: callData.transcripts,
                     coaching_tips: callData.coachingHistory || [],
+                    accumulated_signals: accumulatedSignals,
                     created_at: new Date(callData.startTime).toISOString()
                 });
                 if (insertError) throw insertError;
@@ -157,11 +170,16 @@ class DBService {
         }
     }
 
-    async getRecentCalls(limit = 10) {
+    async getRecentCalls(limit = 10, organizationId = null) {
         try {
+            if (!organizationId) {
+                throw new Error('[DB] getRecentCalls: organizationId is required for multi-tenant isolation');
+            }
+
             const { data, error } = await supabase
                 .from('calls')
                 .select('*, call_summaries(*)')
+                .eq('organization_id', organizationId)
                 .order('created_at', { ascending: false })
                 .limit(limit);
 
@@ -751,26 +769,102 @@ class DBService {
                 deals: targets.deals * multiplier
             };
 
+            // Calculate previous period for trend comparison
+            let previousStartDate = new Date(startDate);
+            let previousEndDate = new Date(startDate);
+            
+            const daysDiff = Math.ceil((now - startDate) / (1000 * 60 * 60 * 24));
+            previousStartDate.setDate(previousStartDate.getDate() - daysDiff);
+            
+            const previousStartISO = previousStartDate.toISOString();
+            const previousEndISO = startDate.toISOString();
+
+            // Build previous period queries
+            let prevCallsQuery = supabase
+                .from('calls')
+                .select('id', { count: 'exact' })
+                .gte('created_at', previousStartISO)
+                .lte('created_at', previousEndISO);
+            
+            if (userId) prevCallsQuery = prevCallsQuery.eq('agent_id', userId);
+            else if (organizationId) prevCallsQuery = prevCallsQuery.eq('organization_id', organizationId);
+
+            let prevLeadsQuery = supabase
+                .from('leads')
+                .select('id', { count: 'exact' })
+                .gte('created_at', previousStartISO)
+                .lte('created_at', previousEndISO);
+            
+            if (userId) prevLeadsQuery = prevLeadsQuery.eq('owner_id', userId);
+            else if (organizationId) prevLeadsQuery = prevLeadsQuery.eq('organization_id', organizationId);
+
+            let prevApptQuery = supabase
+                .from('leads')
+                .select('id', { count: 'exact' })
+                .or('status.ilike.%appointment%,status.ilike.%meeting%,status.eq.Discovery')
+                .gte('created_at', previousStartISO)
+                .lte('created_at', previousEndISO);
+            
+            if (userId) prevApptQuery = prevApptQuery.eq('owner_id', userId);
+            else if (organizationId) prevApptQuery = prevApptQuery.eq('organization_id', organizationId);
+
+            let prevDealsQuery = supabase
+                .from('leads')
+                .select('id', { count: 'exact' })
+                .eq('status', 'Closed')
+                .gte('created_at', previousStartISO)
+                .lte('created_at', previousEndISO);
+            
+            if (userId) prevDealsQuery = prevDealsQuery.eq('owner_id', userId);
+            else if (organizationId) prevDealsQuery = prevDealsQuery.eq('organization_id', organizationId);
+
+            // Execute previous period queries
+            const [prevCallsResult, prevLeadsResult, prevApptResult, prevDealsResult] = await Promise.all([
+                prevCallsQuery,
+                prevLeadsQuery,
+                prevApptQuery,
+                prevDealsQuery
+            ]);
+
+            const prevLeadsContacted = prevCallsResult.data?.length || 0;
+            const prevNewLeadsCount = prevLeadsResult.data?.length || 0;
+            const prevAppointmentsCount = prevApptResult.data?.length || 0;
+            const prevClosedCount = prevDealsResult.data?.length || 0;
+
+            // Calculate percentage changes
+            const calculatePercentageChange = (current, previous) => {
+                if (previous === 0) return 0;
+                return Math.round(((current - previous) / previous) * 100);
+            };
+
             return {
                 leadsContacted: {
                     current: leadsContacted,
                     target: finalTargets.calls,
-                    percentage: Math.min(100, Math.round((leadsContacted / finalTargets.calls) * 100))
+                    previous: prevLeadsContacted,
+                    percentage: Math.min(100, Math.round((leadsContacted / finalTargets.calls) * 100)),
+                    percentageChange: calculatePercentageChange(leadsContacted, prevLeadsContacted)
                 },
                 newLeads: {
                     current: newLeadsCount,
                     target: finalTargets.newLeads,
-                    percentage: Math.min(100, Math.round((newLeadsCount / finalTargets.newLeads) * 100))
+                    previous: prevNewLeadsCount,
+                    percentage: Math.min(100, Math.round((newLeadsCount / finalTargets.newLeads) * 100)),
+                    percentageChange: calculatePercentageChange(newLeadsCount, prevNewLeadsCount)
                 },
                 appointments: {
                     current: appointmentsCount,
                     target: finalTargets.meetings,
-                    percentage: Math.min(100, Math.round((appointmentsCount / finalTargets.meetings) * 100))
+                    previous: prevAppointmentsCount,
+                    percentage: Math.min(100, Math.round((appointmentsCount / finalTargets.meetings) * 100)),
+                    percentageChange: calculatePercentageChange(appointmentsCount, prevAppointmentsCount)
                 },
                 closedDeals: {
                     current: closedCount,
                     target: finalTargets.deals,
-                    percentage: Math.min(100, Math.round((closedCount / finalTargets.deals) * 100))
+                    previous: prevClosedCount,
+                    percentage: Math.min(100, Math.round((closedCount / finalTargets.deals) * 100)),
+                    percentageChange: calculatePercentageChange(closedCount, prevClosedCount)
                 }
             };
         } catch (err) {
@@ -1004,6 +1098,121 @@ class DBService {
         }
     }
 
+    async getTeamPerformance(organizationId, timeRange = 'week') {
+        try {
+            // OPTIMIZED: Check cache first (30 seconds TTL)
+            const cacheKey = `team_perf_${organizationId}_${timeRange}`;
+            const cached = dashboardCache.get(cacheKey);
+            if (cached) {
+                console.log('[Cache] Hit: getTeamPerformance');
+                return cached;
+            }
+
+            // Calculate date range
+            const now = new Date();
+            let startDate;
+
+            switch (timeRange) {
+                case 'week':
+                    startDate = new Date(now);
+                    startDate.setDate(startDate.getDate() - 7);
+                    break;
+                case 'month':
+                    startDate = new Date(now);
+                    startDate.setMonth(startDate.getMonth() - 1);
+                    break;
+                default: // day
+                    startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            }
+
+            const startISO = startDate.toISOString();
+
+            // OPTIMIZED: Query 1 - Get all team members (1 query)
+            const { data: members, error: membersError } = await supabase
+                .from('profiles')
+                .select('id, full_name, avatar_url, role')
+                .eq('organization_id', organizationId);
+
+            if (membersError) throw membersError;
+            if (!members || members.length === 0) {
+                return { success: true, performance: [] };
+            }
+
+            // OPTIMIZED: Query 2 - Get ALL calls at once (1 query instead of N)
+            const { data: allCalls } = await supabase
+                .from('calls')
+                .select('agent_id')
+                .eq('organization_id', organizationId)
+                .gte('created_at', startISO);
+
+            // OPTIMIZED: Query 3 - Get ALL meetings at once (1 query instead of N)
+            const { data: allMeetings } = await supabase
+                .from('leads')
+                .select('owner_id')
+                .eq('organization_id', organizationId)
+                .or('status.ilike.%appointment%,status.ilike.%meeting%,status.eq.Discovery')
+                .gte('updated_at', startISO);
+
+            // OPTIMIZED: Query 4 - Get ALL deals at once (1 query instead of N)
+            const { data: allDeals } = await supabase
+                .from('leads')
+                .select('owner_id, value')
+                .eq('organization_id', organizationId)
+                .eq('status', 'Closed')
+                .gte('updated_at', startISO);
+
+            // OPTIMIZED: Build lookup maps in-memory (fast)
+            const callsMap = {};
+            const meetingsMap = {};
+            const dealsMap = {};
+
+            allCalls?.forEach(call => {
+                callsMap[call.agent_id] = (callsMap[call.agent_id] || 0) + 1;
+            });
+
+            allMeetings?.forEach(meeting => {
+                meetingsMap[meeting.owner_id] = (meetingsMap[meeting.owner_id] || 0) + 1;
+            });
+
+            allDeals?.forEach(deal => {
+                if (!dealsMap[deal.owner_id]) {
+                    dealsMap[deal.owner_id] = { count: 0, revenue: 0 };
+                }
+                dealsMap[deal.owner_id].count++;
+                dealsMap[deal.owner_id].revenue += parseFloat(deal.value) || 0;
+            });
+
+            // OPTIMIZED: Build performance array without additional queries
+            const performance = members.map(member => {
+                const dealStats = dealsMap[member.id] || { count: 0, revenue: 0 };
+                
+                return {
+                    id: member.id,
+                    name: member.full_name || 'Unknown',
+                    avatar: member.avatar_url,
+                    role: member.role,
+                    calls: callsMap[member.id] || 0,
+                    meetings: meetingsMap[member.id] || 0,
+                    deals: dealStats.count,
+                    revenue: dealStats.revenue
+                };
+            });
+
+            // Sort by revenue desc
+            performance.sort((a, b) => b.revenue - a.revenue);
+
+            const result = { success: true, performance };
+            
+            // OPTIMIZED: Store in cache for 30 seconds
+            dashboardCache.set(cacheKey, result, 30);
+
+            return result;
+        } catch (err) {
+            console.error('[DB] Get Team Performance Error:', err.message);
+            return { success: false, error: err.message, performance: [] };
+        }
+    }
+
     async getAtRiskLeads(limit = 5, userId, organizationId) {
         try {
             const sevenDaysAgo = new Date();
@@ -1033,6 +1242,311 @@ class DBService {
         } catch (err) {
             console.error('[DB] At Risk Error:', err);
             return [];
+        }
+    }
+
+    async getDailyInsights(organizationId) {
+        try {
+            // OPTIMIZED: Check cache first (30 seconds TTL)
+            const cacheKey = `daily_insights_${organizationId}`;
+            const cached = dashboardCache.get(cacheKey);
+            if (cached) {
+                console.log('[Cache] Hit: getDailyInsights');
+                return cached;
+            }
+
+            const insights = [];
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const todayISO = today.toISOString();
+            const yesterday = new Date(today);
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayISO = yesterday.toISOString();
+
+            // OPTIMIZED: Query 1 - Get team members (1 query)
+            const { data: teamStats } = await supabase
+                .from('profiles')
+                .select('id, full_name')
+                .eq('organization_id', organizationId)
+                .eq('role', 'agent');
+
+            // OPTIMIZED: Query 2 - Get ALL today's calls at once (1 query instead of N)
+            const { data: allTodayCalls } = await supabase
+                .from('calls')
+                .select('agent_id')
+                .eq('organization_id', organizationId)
+                .gte('created_at', todayISO);
+
+            // Build calls count map in-memory
+            const callsCountMap = {};
+            allTodayCalls?.forEach(call => {
+                callsCountMap[call.agent_id] = (callsCountMap[call.agent_id] || 0) + 1;
+            });
+
+            // Insight 1: Reps below target today (no additional queries)
+            if (teamStats) {
+                teamStats.forEach(rep => {
+                    const callCount = callsCountMap[rep.id] || 0;
+                    if (callCount < 10) { // Daily target = 10 calls
+                        insights.push({
+                            type: 'warning',
+                            icon: 'AlertTriangle',
+                            title: `${rep.full_name} מתחת ליעד`,
+                            description: `ביצע רק ${callCount} שיחות היום (יעד: 10)`,
+                            action: 'דבר איתו עכשיו',
+                            priority: 'high'
+                        });
+                    }
+                });
+            }
+
+            // OPTIMIZED: Query 3 - Hot leads not contacted (1 query)
+            const { data: hotLeads } = await supabase
+                .from('leads')
+                .select('id, name, score')
+                .eq('organization_id', organizationId)
+                .gte('score', 80)
+                .is('last_contact_at', null)
+                .limit(3);
+
+            if (hotLeads && hotLeads.length > 0) {
+                insights.push({
+                    type: 'opportunity',
+                    icon: 'TrendingUp',
+                    title: `${hotLeads.length} לידים חמים ממתינים`,
+                    description: 'ציון גבוה אבל עדיין לא יצרתם קשר',
+                    action: 'התקשר עכשיו',
+                    priority: 'high'
+                });
+            }
+
+            // OPTIMIZED: Query 4 - Deals closing soon (1 query)
+            const nextWeek = new Date(now);
+            nextWeek.setDate(nextWeek.getDate() + 7);
+            const { data: closingDeals } = await supabase
+                .from('leads')
+                .select('id, name, value')
+                .eq('organization_id', organizationId)
+                .eq('status', 'Negotiation')
+                .lte('expected_close_date', nextWeek.toISOString())
+                .limit(3);
+
+            if (closingDeals && closingDeals.length > 0) {
+                const totalValue = closingDeals.reduce((sum, d) => sum + (parseFloat(d.value) || 0), 0);
+                insights.push({
+                    type: 'success',
+                    icon: 'Target',
+                    title: `${closingDeals.length} עסקאות נסגרות השבוע`,
+                    description: `סה"כ ₪${(totalValue / 1000).toFixed(0)}k - תדחוף לסגירה`,
+                    action: 'עקוב אחריהן',
+                    priority: 'medium'
+                });
+            }
+
+            // OPTIMIZED: Query 5 - Team performance trend (1 query instead of 2)
+            const { data: recentCalls } = await supabase
+                .from('calls')
+                .select('created_at')
+                .eq('organization_id', organizationId)
+                .gte('created_at', yesterdayISO);
+
+            // Split into today vs yesterday in-memory
+            const todayCount = recentCalls?.filter(c => c.created_at >= todayISO).length || 0;
+            const yesterdayCount = recentCalls?.filter(c => c.created_at < todayISO).length || 0;
+
+            if (yesterdayCount > 0) {
+                const change = ((todayCount - yesterdayCount) / yesterdayCount) * 100;
+                if (change < -20) {
+                    insights.push({
+                        type: 'warning',
+                        icon: 'TrendingDown',
+                        title: 'פעילות הצוות יורדת',
+                        description: `${Math.abs(change).toFixed(0)}% פחות שיחות מאתמול`,
+                        action: 'תעורר מוטיבציה',
+                        priority: 'medium'
+                    });
+                } else if (change > 20) {
+                    insights.push({
+                        type: 'success',
+                        icon: 'TrendingUp',
+                        title: 'הצוות בשיא!',
+                        description: `${change.toFixed(0)}% יותר שיחות מאתמול`,
+                        action: 'המשיכו כך',
+                        priority: 'low'
+                    });
+                }
+            }
+
+            // Sort by priority
+            const priorityOrder = { high: 0, medium: 1, low: 2 };
+            insights.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+
+            const result = { success: true, insights: insights.slice(0, 4) }; // Max 4 insights
+            
+            // OPTIMIZED: Store in cache for 30 seconds
+            dashboardCache.set(cacheKey, result, 30);
+
+            return result;
+        } catch (err) {
+            console.error('[DB] Get Daily Insights Error:', err.message);
+            return { success: false, error: err.message, insights: [] };
+        }
+    }
+
+    async getGoalProgress(organizationId) {
+        try {
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const todayISO = today.toISOString();
+
+            // Get today's stats
+            const { data: calls } = await supabase
+                .from('calls')
+                .select('id', { count: 'exact' })
+                .eq('organization_id', organizationId)
+                .gte('created_at', todayISO);
+
+            const { data: meetings } = await supabase
+                .from('leads')
+                .select('id', { count: 'exact' })
+                .eq('organization_id', organizationId)
+                .or('status.ilike.%appointment%,status.ilike.%meeting%')
+                .gte('updated_at', todayISO);
+
+            const { data: deals } = await supabase
+                .from('leads')
+                .select('id', { count: 'exact' })
+                .eq('organization_id', organizationId)
+                .eq('status', 'Closed')
+                .gte('updated_at', todayISO);
+
+            // Get team size for target calculation
+            const { data: team } = await supabase
+                .from('profiles')
+                .select('id', { count: 'exact' })
+                .eq('organization_id', organizationId)
+                .eq('role', 'agent');
+
+            const teamSize = team?.length || 1;
+
+            // Daily targets per rep
+            const callsTarget = 10 * teamSize;
+            const meetingsTarget = 3 * teamSize;
+            const dealsTarget = 1 * teamSize;
+
+            const callsCount = calls?.length || 0;
+            const meetingsCount = meetings?.length || 0;
+            const dealsCount = deals?.length || 0;
+
+            return {
+                success: true,
+                teamProgress: {
+                    calls: {
+                        current: callsCount,
+                        target: callsTarget,
+                        percentage: Math.round((callsCount / callsTarget) * 100)
+                    },
+                    meetings: {
+                        current: meetingsCount,
+                        target: meetingsTarget,
+                        percentage: Math.round((meetingsCount / meetingsTarget) * 100)
+                    },
+                    deals: {
+                        current: dealsCount,
+                        target: dealsTarget,
+                        percentage: Math.round((dealsCount / dealsTarget) * 100)
+                    }
+                }
+            };
+        } catch (err) {
+            console.error('[DB] Get Goal Progress Error:', err.message);
+            return { success: false, error: err.message, teamProgress: null };
+        }
+    }
+
+    async getLiveActivity(organizationId, limit = 10) {
+        try {
+            const activities = [];
+            const now = new Date();
+            const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+
+            // OPTIMIZED: Query 1 - Get active calls WITH agent info using JOIN (1 query instead of N+1)
+            const { data: activeCalls } = await supabase
+                .from('calls')
+                .select(`
+                    id,
+                    agent_id,
+                    created_at,
+                    duration,
+                    profiles!calls_agent_id_fkey (
+                        full_name,
+                        avatar_url
+                    )
+                `)
+                .eq('organization_id', organizationId)
+                .is('ended_at', null)
+                .gte('created_at', fiveMinutesAgo.toISOString())
+                .order('created_at', { ascending: false });
+
+            // Build activities WITHOUT additional queries
+            if (activeCalls) {
+                activeCalls.forEach(call => {
+                    if (call.profiles) {
+                        const callDuration = Math.floor((now.getTime() - new Date(call.created_at).getTime()) / 1000);
+                        activities.push({
+                            id: call.id,
+                            agentName: call.profiles.full_name,
+                            agentAvatar: call.profiles.avatar_url,
+                            action: 'in_call',
+                            duration: callDuration,
+                            timestamp: call.created_at
+                        });
+                    }
+                });
+            }
+
+            // OPTIMIZED: Query 2 - Get ended calls WITH agent info using JOIN (1 query instead of N+1)
+            const { data: endedCalls } = await supabase
+                .from('calls')
+                .select(`
+                    id,
+                    agent_id,
+                    ended_at,
+                    quality_score,
+                    profiles!calls_agent_id_fkey (
+                        full_name,
+                        avatar_url
+                    )
+                `)
+                .eq('organization_id', organizationId)
+                .not('ended_at', 'is', null)
+                .gte('ended_at', fiveMinutesAgo.toISOString())
+                .order('ended_at', { ascending: false })
+                .limit(limit);
+
+            // Build activities WITHOUT additional queries
+            if (endedCalls) {
+                endedCalls.forEach(call => {
+                    if (call.profiles) {
+                        activities.push({
+                            id: call.id,
+                            agentName: call.profiles.full_name,
+                            agentAvatar: call.profiles.avatar_url,
+                            action: 'call_ended',
+                            quality: call.quality_score || 0,
+                            timestamp: call.ended_at
+                        });
+                    }
+                });
+            }
+
+            // Sort by timestamp descending
+            activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+            return { success: true, activities: activities.slice(0, limit) };
+        } catch (err) {
+            console.error('[DB] Get Live Activity Error:', err.message);
+            return { success: false, error: err.message, activities: [] };
         }
     }
 
@@ -1525,6 +2039,463 @@ class DBService {
         } catch (err) {
             console.error('[DB] Delete Knowledge Error:', err.message);
             return false;
+        }
+    }
+
+    async completeDebrief(callId, agentId) {
+        try {
+            const { data: call } = await supabase
+                .from('calls')
+                .select('id, debrief_completed')
+                .eq('id', callId)
+                .eq('agent_id', agentId)
+                .single();
+
+            if (!call) {
+                return { xpAwarded: 0, error: 'Call not found' };
+            }
+
+            if (call.debrief_completed) {
+                return { xpAwarded: 0, message: 'Already completed' };
+            }
+
+            await supabase
+                .from('calls')
+                .update({ debrief_completed: true })
+                .eq('id', callId);
+
+            const xpAmount = 10;
+            let xpAwarded = 0;
+            try {
+                await supabase.rpc('add_xp', { p_agent_id: agentId, p_amount: xpAmount, p_reason: 'debrief_complete' });
+                xpAwarded = xpAmount;
+            } catch (xpErr) {
+                console.error('[DB] add_xp rpc failed (may not exist yet):', xpErr.message);
+            }
+
+            if (xpAwarded === 0) {
+                await supabase
+                    .from('calls')
+                    .update({ debrief_completed: false })
+                    .eq('id', callId);
+            }
+
+            return { xpAwarded };
+        } catch (err) {
+            console.error('[DB] completeDebrief error:', err.message);
+            return { xpAwarded: 0, error: err.message };
+        }
+    }
+
+    async getRepAnalytics(agentId, days = 30) {
+        try {
+            const since = new Date();
+            since.setDate(since.getDate() - days);
+
+            const { data: calls, error } = await supabase
+                .from('calls')
+                .select('id, duration, created_at, coaching_tips, summary_json, status')
+                .eq('agent_id', agentId)
+                .eq('status', 'completed')
+                .gte('created_at', since.toISOString())
+                .order('created_at', { ascending: false })
+                .limit(100);
+
+            if (error || !calls || calls.length === 0) {
+                return { totalCalls: 0, strengths: [], weaknesses: [], objectionSuccessRate: {}, stageConversion: {}, improvementTrend: {}, topStruggles: [] };
+            }
+
+            const breakdownTotals = { discovery: [], listening: [], objection_handling: [], closing: [] };
+            const objectionCounts = {};
+            const stageCounts = {};
+            const weekScores = { lastWeek: [], thisWeek: [] };
+            const now = new Date();
+            const oneWeekAgo = new Date(now); oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+            const twoWeeksAgo = new Date(now); twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
+
+            for (const call of calls) {
+                const summary = call.summary_json;
+                if (summary?.score_breakdown) {
+                    for (const [key, val] of Object.entries(summary.score_breakdown)) {
+                        if (breakdownTotals[key] !== undefined) {
+                            breakdownTotals[key].push(Number(val) || 0);
+                        }
+                    }
+                }
+
+                const callDate = new Date(call.created_at);
+                const callScore = summary?.score;
+                if (callScore !== undefined) {
+                    if (callDate >= oneWeekAgo) weekScores.thisWeek.push(callScore);
+                    else if (callDate >= twoWeeksAgo) weekScores.lastWeek.push(callScore);
+                }
+
+                const tips = call.coaching_tips;
+                if (Array.isArray(tips)) {
+                    for (const tip of tips) {
+                        if (tip.stage && typeof tip.stage === 'string') {
+                            stageCounts[tip.stage] = (stageCounts[tip.stage] || 0) + 1;
+                        }
+
+                        const signals = tip.signals;
+                        if (signals?.objections && Array.isArray(signals.objections)) {
+                            for (const obj of signals.objections) {
+                                const key = (obj.text || 'unknown').toLowerCase().trim();
+                                if (!objectionCounts[key]) objectionCounts[key] = { total: 0, handled: 0 };
+                                objectionCounts[key].total++;
+                                if (obj.status === 'handled') objectionCounts[key].handled++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            const areas = Object.entries(breakdownTotals)
+                .filter(([, vals]) => vals.length > 0)
+                .map(([area, vals]) => {
+                    const avg = Math.round(vals.reduce((s, v) => s + v, 0) / vals.length);
+                    const recentAvg = vals.length > 5
+                        ? Math.round(vals.slice(0, 5).reduce((s, v) => s + v, 0) / 5)
+                        : avg;
+                    const olderAvg = vals.length > 10
+                        ? Math.round(vals.slice(5, 10).reduce((s, v) => s + v, 0) / Math.min(5, vals.length - 5))
+                        : avg;
+                    const trend = recentAvg > olderAvg + 3 ? 'improving' : recentAvg < olderAvg - 3 ? 'declining' : 'stable';
+                    return { area, avgScore: avg, trend };
+                })
+                .sort((a, b) => a.avgScore - b.avgScore);
+
+            const weaknesses = areas.filter(a => a.avgScore < 60).slice(0, 3);
+            const strengths = areas.filter(a => a.avgScore >= 60).sort((a, b) => b.avgScore - a.avgScore).slice(0, 3);
+
+            const objectionSuccessRate = {};
+            const objectionStruggles = [];
+            for (const [key, data] of Object.entries(objectionCounts)) {
+                if (data.total >= 2) {
+                    const rate = data.handled / data.total;
+                    objectionSuccessRate[key] = Number(rate.toFixed(2));
+                    if (rate < 0.5) objectionStruggles.push({ text: key, rate });
+                }
+            }
+
+            const topStruggles = [];
+            if (weaknesses.length > 0) topStruggles.push(`${weaknesses[0].area} חלש (${weaknesses[0].avgScore})`);
+            objectionStruggles.sort((a, b) => a.rate - b.rate).slice(0, 2).forEach(o => {
+                topStruggles.push(`התנגדות "${o.text}" (${Math.round(o.rate * 100)}% הצלחה)`);
+            });
+
+            const avgArr = (arr) => arr.length > 0 ? Math.round(arr.reduce((s, v) => s + v, 0) / arr.length) : null;
+            const improvementTrend = {
+                lastWeek: avgArr(weekScores.lastWeek),
+                thisWeek: avgArr(weekScores.thisWeek),
+                delta: (avgArr(weekScores.thisWeek) || 0) - (avgArr(weekScores.lastWeek) || 0)
+            };
+
+            const totalStages = Object.values(stageCounts).reduce((s, v) => s + v, 0);
+            const stageConversion = {};
+            for (const [stage, count] of Object.entries(stageCounts)) {
+                stageConversion[stage] = totalStages > 0 ? Math.round((count / totalStages) * 100) : 0;
+            }
+
+            return {
+                totalCalls: calls.length,
+                strengths,
+                weaknesses,
+                objectionSuccessRate,
+                stageConversion,
+                improvementTrend,
+                topStruggles: topStruggles.slice(0, 3)
+            };
+        } catch (err) {
+            console.error('[DB] getRepAnalytics error:', err.message);
+            return { totalCalls: 0, strengths: [], weaknesses: [], objectionSuccessRate: {}, stageConversion: {}, improvementTrend: {}, topStruggles: [] };
+        }
+    }
+
+    async getObjectionAnalytics(organizationId, days = 60) {
+        try {
+            const since = new Date();
+            since.setDate(since.getDate() - days);
+
+            const { data: calls, error } = await supabase
+                .from('calls')
+                .select('id, coaching_tips, summary_json, status')
+                .eq('organization_id', organizationId)
+                .eq('status', 'completed')
+                .gte('created_at', since.toISOString())
+                .limit(500);
+
+            if (error || !calls || calls.length === 0) {
+                return { objections: {} };
+            }
+
+            const objectionData = {};
+
+            for (const call of calls) {
+                const isSuccess = call.summary_json?.is_success === true;
+                const tips = call.coaching_tips;
+                if (!Array.isArray(tips)) continue;
+
+                for (const tip of tips) {
+                    const signals = tip.signals;
+                    if (!signals?.objections || !Array.isArray(signals.objections)) continue;
+
+                    const battleCard = tip.battle_card;
+                    const battleResponse = (battleCard?.triggered && battleCard?.response) ? battleCard.response : null;
+
+                    for (const obj of signals.objections) {
+                        const type = this.classifyObjection(obj.text);
+                        if (!objectionData[type]) {
+                            objectionData[type] = { count: 0, handled: 0, successWhenHandled: 0, successWhenOpen: 0, handledSuccessCount: 0, openCount: 0, responses: {} };
+                        }
+
+                        const d = objectionData[type];
+                        d.count++;
+
+                        if (obj.status === 'handled') {
+                            d.handled++;
+                            if (isSuccess) d.successWhenHandled++;
+                            d.handledSuccessCount++;
+                        } else {
+                            d.openCount++;
+                            if (isSuccess) d.successWhenOpen++;
+                        }
+
+                        if (battleResponse && obj.status === 'handled') {
+                            const key = battleResponse.substring(0, 60);
+                            if (!d.responses[key]) d.responses[key] = { response: battleResponse, total: 0, success: 0 };
+                            d.responses[key].total++;
+                            if (isSuccess) d.responses[key].success++;
+                        }
+                    }
+                }
+            }
+
+            const result = {};
+            for (const [type, data] of Object.entries(objectionData)) {
+                const handledRate = data.count > 0 ? data.handled / data.count : 0;
+                const successHandled = data.handledSuccessCount > 0 ? data.successWhenHandled / data.handledSuccessCount : 0;
+                const successOpen = data.openCount > 0 ? data.successWhenOpen / data.openCount : 0;
+
+                const topResponses = Object.values(data.responses)
+                    .filter(r => r.total >= 2)
+                    .map(r => ({ response: r.response, successRate: r.total > 0 ? r.success / r.total : 0 }))
+                    .sort((a, b) => b.successRate - a.successRate)
+                    .slice(0, 3);
+
+                result[type] = {
+                    count: data.count,
+                    handledRate: Number(handledRate.toFixed(2)),
+                    successWhenHandled: Number(successHandled.toFixed(2)),
+                    successWhenOpen: Number(successOpen.toFixed(2)),
+                    topResponses
+                };
+            }
+
+            return { objections: result };
+        } catch (err) {
+            console.error('[DB] getObjectionAnalytics error:', err.message);
+            return { objections: {} };
+        }
+    }
+
+    classifyObjection(text) {
+        if (!text) return 'other';
+        const lower = text.toLowerCase();
+        if (lower.includes('יקר') || lower.includes('מחיר') || lower.includes('תקציב') || lower.includes('עלות') || lower.includes('כסף')) return 'price';
+        if (lower.includes('זמן') || lower.includes('עכשיו') || lower.includes('מאוחר') || lower.includes('עתיד') || lower.includes('אחרי')) return 'timing';
+        if (lower.includes('מתחר') || lower.includes('כבר יש') || lower.includes('עובדים עם') || lower.includes('ספק')) return 'competition';
+        if (lower.includes('חשוב') || lower.includes('התייעץ') || lower.includes('לחשוב') || lower.includes('שותף')) return 'decision';
+        if (lower.includes('לא רלוונטי') || lower.includes('לא מעניין') || lower.includes('לא צריך')) return 'need';
+        return 'other';
+    }
+
+    async getOrgMinutes(organizationId, days = 30) {
+        try {
+            const since = new Date();
+            since.setDate(since.getDate() - days);
+
+            const { data: calls, error } = await supabase
+                .from('calls')
+                .select('duration, created_at')
+                .eq('organization_id', organizationId)
+                .gte('created_at', since.toISOString());
+
+            if (error) {
+                console.error('[DB] getOrgMinutes error:', error.message);
+                return { totalMinutes: 0, totalCalls: 0, avgDuration: 0 };
+            }
+
+            const totalSeconds = calls.reduce((sum, call) => sum + (call.duration || 0), 0);
+            const totalMinutes = Math.round(totalSeconds / 60);
+            const avgDuration = calls.length > 0 ? Math.round(totalSeconds / calls.length) : 0;
+
+            return {
+                totalMinutes,
+                totalCalls: calls.length,
+                avgDuration,
+                periodDays: days
+            };
+        } catch (err) {
+            console.error('[DB] getOrgMinutes error:', err.message);
+            return { totalMinutes: 0, totalCalls: 0, avgDuration: 0 };
+        }
+    }
+
+    async getRepMinutes(agentId, days = 30) {
+        try {
+            const since = new Date();
+            since.setDate(since.getDate() - days);
+
+            const { data: calls, error } = await supabase
+                .from('calls')
+                .select('duration, created_at')
+                .eq('agent_id', agentId)
+                .gte('created_at', since.toISOString());
+
+            if (error) {
+                console.error('[DB] getRepMinutes error:', error.message);
+                return { totalMinutes: 0, totalCalls: 0, avgDuration: 0 };
+            }
+
+            const totalSeconds = calls.reduce((sum, call) => sum + (call.duration || 0), 0);
+            const totalMinutes = Math.round(totalSeconds / 60);
+            const avgDuration = calls.length > 0 ? Math.round(totalSeconds / calls.length) : 0;
+
+            return {
+                totalMinutes,
+                totalCalls: calls.length,
+                avgDuration,
+                periodDays: days
+            };
+        } catch (err) {
+            console.error('[DB] getRepMinutes error:', err.message);
+            return { totalMinutes: 0, totalCalls: 0, avgDuration: 0 };
+        }
+    }
+
+    /**
+     * Get aggregated signals analytics across all calls for an organization
+     * This helps identify common pains, objections, gaps across all customers
+     * @param {string} organizationId 
+     * @param {number} days - How many days back to analyze
+     * @returns {Object} Aggregated signals with frequency counts
+     */
+    async getSignalsAnalytics(organizationId, days = 60) {
+        try {
+            const since = new Date();
+            since.setDate(since.getDate() - days);
+
+            const { data: calls, error } = await supabase
+                .from('calls')
+                .select('id, accumulated_signals, summary_json, created_at')
+                .eq('organization_id', organizationId)
+                .eq('status', 'completed')
+                .gte('created_at', since.toISOString())
+                .limit(1000);
+
+            if (error || !calls || calls.length === 0) {
+                return { 
+                    topPains: [], 
+                    topObjections: [], 
+                    topGaps: [], 
+                    topVisions: [],
+                    totalCalls: 0 
+                };
+            }
+
+            // Aggregate all signals with frequency counts
+            const painsMap = new Map();
+            const objectionsMap = new Map();
+            const gapsMap = new Map();
+            const visionsMap = new Map();
+
+            calls.forEach(call => {
+                const signals = call.accumulated_signals;
+                if (!signals) return;
+
+                // Count pains
+                (signals.pains || []).forEach(pain => {
+                    const text = pain.text?.toLowerCase().trim();
+                    if (text) {
+                        const existing = painsMap.get(text) || { text: pain.text, count: 0, severity: pain.severity || 'medium' };
+                        existing.count++;
+                        painsMap.set(text, existing);
+                    }
+                });
+
+                // Count objections
+                (signals.objections || []).forEach(obj => {
+                    const text = obj.text?.toLowerCase().trim();
+                    if (text) {
+                        const existing = objectionsMap.get(text) || { text: obj.text, count: 0, handledCount: 0 };
+                        existing.count++;
+                        if (obj.status === 'handled') existing.handledCount++;
+                        objectionsMap.set(text, existing);
+                    }
+                });
+
+                // Count gaps
+                (signals.gaps || []).forEach(gap => {
+                    const text = gap.text?.toLowerCase().trim();
+                    if (text) {
+                        const existing = gapsMap.get(text) || { text: gap.text, count: 0 };
+                        existing.count++;
+                        gapsMap.set(text, existing);
+                    }
+                });
+
+                // Count visions
+                (signals.vision || []).forEach(vision => {
+                    const text = vision.text?.toLowerCase().trim();
+                    if (text) {
+                        const existing = visionsMap.get(text) || { text: vision.text, count: 0 };
+                        existing.count++;
+                        visionsMap.set(text, existing);
+                    }
+                });
+            });
+
+            // Sort by frequency and get top items
+            const sortByCount = (a, b) => b.count - a.count;
+
+            const topPains = Array.from(painsMap.values())
+                .sort(sortByCount)
+                .slice(0, 10);
+
+            const topObjections = Array.from(objectionsMap.values())
+                .map(obj => ({
+                    ...obj,
+                    handleRate: obj.count > 0 ? Math.round((obj.handledCount / obj.count) * 100) : 0
+                }))
+                .sort(sortByCount)
+                .slice(0, 10);
+
+            const topGaps = Array.from(gapsMap.values())
+                .sort(sortByCount)
+                .slice(0, 10);
+
+            const topVisions = Array.from(visionsMap.values())
+                .sort(sortByCount)
+                .slice(0, 10);
+
+            return {
+                topPains,
+                topObjections,
+                topGaps,
+                topVisions,
+                totalCalls: calls.length,
+                periodDays: days
+            };
+        } catch (err) {
+            console.error('[DB] getSignalsAnalytics error:', err.message);
+            return { 
+                topPains: [], 
+                topObjections: [], 
+                topGaps: [], 
+                topVisions: [],
+                totalCalls: 0 
+            };
         }
     }
 }

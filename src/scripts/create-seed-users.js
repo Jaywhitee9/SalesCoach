@@ -14,16 +14,18 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey);
 async function createUsers() {
     console.log('Seeding Users...');
 
+    const seedPassword = process.env.SEED_USER_PASSWORD || require('crypto').randomUUID();
+
     const users = [
         {
             email: 'manager@salesflow.ai',
-            password: 'password123',
+            password: seedPassword,
             data: { full_name: 'Manager Mike', avatar_url: 'https://ui-avatars.com/api/?name=Manager+Mike' },
             role: 'manager'
         },
         {
             email: 'rep@salesflow.ai',
-            password: 'password123',
+            password: seedPassword,
             data: { full_name: 'Rep Rachel', avatar_url: 'https://ui-avatars.com/api/?name=Rep+Rachel' },
             role: 'rep'
         }

@@ -1,4 +1,5 @@
 const DBService = require('../services/db-service');
+const CoachingEngine = require('../services/coaching-engine');
 
 /**
  * Registers generic API routes
@@ -8,10 +9,36 @@ async function registerApiRoutes(fastify) {
 
     // --- LEADS ---
     fastify.get('/api/leads', async (request, reply) => {
-        const organizationId = request.query.organizationId; // Support filtering by org
+        const auth = await getAuthUser(request, reply);
+        if (!auth) return;
+
+        const organizationId = auth.profile?.organization_id;
+        if (!organizationId) {
+            return reply.status(403).send({ error: 'No organization assigned' });
+        }
+
         const leads = await DBService.getLeads(organizationId);
         return leads;
-        return leads;
+    });
+
+    // --- PRE-CALL BRIEF ---
+    fastify.get('/api/leads/:id/pre-call-brief', async (request, reply) => {
+        try {
+            const { id } = request.params;
+            if (!id) {
+                return reply.code(400).send({ success: false, error: 'Missing lead ID' });
+            }
+
+            const brief = await CoachingEngine.generatePreCallBrief(id);
+            if (!brief) {
+                return reply.code(404).send({ success: false, error: 'Could not generate brief' });
+            }
+
+            return { success: true, ...brief };
+        } catch (err) {
+            console.error('[API] Pre-call brief error:', err.message);
+            return reply.code(500).send({ success: false, error: 'Failed to generate pre-call brief' });
+        }
     });
 
     // --- SYSTEM HEALTH ---
@@ -205,8 +232,16 @@ async function registerApiRoutes(fastify) {
 
     // --- CALLS (Existing functionality via API) ---
     fastify.get('/api/calls/recent', async (request, reply) => {
-        const limit = parseInt(request.query.limit) || 10;
-        const calls = await DBService.getRecentCalls(limit);
+        const auth = await getAuthUser(request, reply);
+        if (!auth) return;
+
+        const organizationId = auth.profile?.organization_id;
+        if (!organizationId) {
+            return reply.status(403).send({ error: 'No organization assigned' });
+        }
+
+        const limit = Math.min(parseInt(request.query.limit, 10) || 10, 100);
+        const calls = await DBService.getRecentCalls(limit, organizationId);
         return calls;
     });
 
@@ -390,6 +425,31 @@ async function registerApiRoutes(fastify) {
         return true;
     }
 
+    async function getAuthUser(request, reply) {
+        const authHeader = request.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            reply.code(401).send({ error: 'Unauthorized' });
+            return null;
+        }
+        const token = authHeader.split(' ')[1];
+        const { createClient } = require('@supabase/supabase-js');
+        const supabase = createClient(
+            process.env.SUPABASE_URL,
+            process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+        );
+        const { data: { user }, error } = await supabase.auth.getUser(token);
+        if (error || !user) {
+            reply.code(401).send({ error: 'Unauthorized' });
+            return null;
+        }
+        const { data: profile } = await supabase
+            .from('profiles')
+            .select('organization_id, role')
+            .eq('id', user.id)
+            .single();
+        return { user, profile };
+    }
+
     // --- PANEL DASHBOARD ---
 
     // Panel Stats (KPIs)
@@ -536,6 +596,64 @@ async function registerApiRoutes(fastify) {
         } catch (err) {
             console.error('[API] Error fetching quality trend:', err.message);
             return reply.code(500).send({ error: 'Failed to fetch quality trend' });
+        }
+    });
+
+    fastify.get('/api/panel/team-performance', async (request, reply) => {
+        try {
+            const organizationId = request.query.organizationId;
+            if (!organizationId) return reply.code(400).send({ success: false, error: 'Missing organizationId' });
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
+
+            const range = request.query.range || 'week';
+            const result = await DBService.getTeamPerformance(organizationId, range);
+            return result;
+        } catch (err) {
+            console.error('[API] Error fetching team performance:', err.message);
+            return reply.code(500).send({ success: false, error: 'Failed to fetch team performance' });
+        }
+    });
+
+    fastify.get('/api/panel/daily-insights', async (request, reply) => {
+        try {
+            const organizationId = request.query.organizationId;
+            if (!organizationId) return reply.code(400).send({ success: false, error: 'Missing organizationId' });
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
+
+            const result = await DBService.getDailyInsights(organizationId);
+            return result;
+        } catch (err) {
+            console.error('[API] Error fetching daily insights:', err.message);
+            return reply.code(500).send({ success: false, error: 'Failed to fetch daily insights' });
+        }
+    });
+
+    fastify.get('/api/panel/goal-progress', async (request, reply) => {
+        try {
+            const organizationId = request.query.organizationId;
+            if (!organizationId) return reply.code(400).send({ success: false, error: 'Missing organizationId' });
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
+
+            const result = await DBService.getGoalProgress(organizationId);
+            return result;
+        } catch (err) {
+            console.error('[API] Error fetching goal progress:', err.message);
+            return reply.code(500).send({ success: false, error: 'Failed to fetch goal progress' });
+        }
+    });
+
+    fastify.get('/api/panel/live-activity', async (request, reply) => {
+        try {
+            const organizationId = request.query.organizationId;
+            if (!organizationId) return reply.code(400).send({ success: false, error: 'Missing organizationId' });
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
+
+            const limit = parseInt(request.query.limit) || 10;
+            const result = await DBService.getLiveActivity(organizationId, limit);
+            return result;
+        } catch (err) {
+            console.error('[API] Error fetching live activity:', err.message);
+            return reply.code(500).send({ success: false, error: 'Failed to fetch live activity' });
         }
     });
 
@@ -1635,6 +1753,279 @@ async function registerApiRoutes(fastify) {
         } catch (err) {
             console.error('[API] Next Assignee Error:', err.message);
             return reply.code(500).send({ error: 'Failed to get next assignee' });
+        }
+    });
+
+    // --- NOTIFICATIONS ---
+    fastify.get('/api/notifications', async (request, reply) => {
+        const userId = request.user?.id;
+        if (!userId) {
+            return reply.code(401).send({ error: 'Unauthorized' });
+        }
+
+        const { limit = 20, unread_only = 'false' } = request.query;
+
+        try {
+            const supabase = require('../lib/supabase');
+            let query = supabase
+                .from('notifications')
+                .select('*')
+                .eq('user_id', userId)
+                .order('created_at', { ascending: false })
+                .limit(parseInt(limit));
+
+            if (unread_only === 'true') {
+                query = query.eq('is_read', false);
+            }
+
+            const { data, error } = await query;
+            if (error) {
+                console.error('[API] Notifications fetch error:', error);
+                return reply.code(500).send({ error: error.message });
+            }
+
+            return { success: true, notifications: data || [] };
+        } catch (err) {
+            console.error('[API] Notifications error:', err);
+            return reply.code(500).send({ error: 'Failed to fetch notifications' });
+        }
+    });
+
+    // PUT /api/notifications/:id/read - סימון התראה כנקראה
+    fastify.put('/api/notifications/:id/read', async (request, reply) => {
+        const { id } = request.params;
+        const userId = request.user?.id;
+
+        if (!userId) {
+            return reply.code(401).send({ error: 'Unauthorized' });
+        }
+
+        try {
+            const supabase = require('../lib/supabase');
+            const { error } = await supabase
+                .from('notifications')
+                .update({ is_read: true })
+                .eq('id', id)
+                .eq('user_id', userId);
+
+            if (error) {
+                console.error('[API] Notification mark read error:', error);
+                return reply.code(500).send({ error: error.message });
+            }
+
+            return { success: true };
+        } catch (err) {
+            console.error('[API] Notification mark read error:', err);
+            return reply.code(500).send({ error: 'Failed to mark notification as read' });
+        }
+    });
+
+    // --- TASKS ---
+    fastify.get('/api/tasks', async (request, reply) => {
+        const userId = request.user?.id;
+        if (!userId) {
+            return reply.code(401).send({ error: 'Unauthorized' });
+        }
+
+        const { completed = 'false' } = request.query;
+
+        try {
+            const supabase = require('../lib/supabase');
+            const { data, error } = await supabase
+                .from('tasks')
+                .select(`
+                    *,
+                    leads (id, full_name, company, phone)
+                `)
+                .eq('owner_id', userId)
+                .eq('completed', completed === 'true')
+                .order('due_date', { ascending: true });
+
+            if (error) {
+                console.error('[API] Tasks fetch error:', error);
+                return reply.code(500).send({ error: error.message });
+            }
+
+            return { success: true, tasks: data || [] };
+        } catch (err) {
+            console.error('[API] Tasks error:', err);
+            return reply.code(500).send({ error: 'Failed to fetch tasks' });
+        }
+    });
+
+    // PUT /api/tasks/:id/complete - סימון משימה כהושלמה
+    fastify.put('/api/tasks/:id/complete', async (request, reply) => {
+        const { id } = request.params;
+        const userId = request.user?.id;
+
+        if (!userId) {
+            return reply.code(401).send({ error: 'Unauthorized' });
+        }
+
+        try {
+            const supabase = require('../lib/supabase');
+            const { error } = await supabase
+                .from('tasks')
+                .update({ completed: true })
+                .eq('id', id)
+                .eq('owner_id', userId);
+
+            if (error) {
+                console.error('[API] Task complete error:', error);
+                return reply.code(500).send({ error: error.message });
+            }
+
+            return { success: true };
+        } catch (err) {
+            console.error('[API] Task complete error:', err);
+            return reply.code(500).send({ error: 'Failed to complete task' });
+        }
+    });
+
+    // --- DEBRIEF COMPLETE (XP for learning) ---
+    fastify.post('/api/debrief/:callId/complete', async (request, reply) => {
+        try {
+            const auth = await getAuthUser(request, reply);
+            if (!auth) return;
+
+            const { callId } = request.params;
+            const agentId = auth.user.id;
+
+            if (!callId) {
+                return reply.code(400).send({ success: false, error: 'Missing callId' });
+            }
+
+            const result = await DBService.completeDebrief(callId, agentId);
+            return { success: true, ...result };
+        } catch (err) {
+            console.error('[API] Debrief complete error:', err.message);
+            return reply.code(500).send({ success: false, error: 'Failed to complete debrief' });
+        }
+    });
+
+    // --- REP ANALYTICS ---
+    fastify.get('/api/reps/:id/analytics', async (request, reply) => {
+        try {
+            const auth = await getAuthUser(request, reply);
+            if (!auth) return;
+
+            const { id } = request.params;
+            const days = Math.min(parseInt(request.query.days, 10) || 30, 365);
+
+            if (!id) {
+                return reply.code(400).send({ success: false, error: 'Missing rep ID' });
+            }
+
+            const userRole = auth.profile?.role || auth.user?.user_metadata?.role;
+            const isSelf = auth.user.id === id;
+            const isManager = ['manager', 'super_admin', 'platform_admin'].includes(userRole);
+            if (!isSelf && !isManager) {
+                return reply.code(403).send({ success: false, error: 'Forbidden' });
+            }
+
+            const analytics = await DBService.getRepAnalytics(id, days);
+
+            let insights = null;
+            if (analytics.totalCalls > 0 && request.query.withInsights === 'true') {
+                try {
+                    insights = await CoachingEngine.generateRepInsights(analytics);
+                } catch (e) {
+                    console.error('[API] Rep insights generation failed:', e.message);
+                }
+            }
+
+            return { success: true, analytics, insights };
+        } catch (err) {
+            console.error('[API] Rep analytics error:', err.message);
+            return reply.code(500).send({ success: false, error: 'Failed to get rep analytics' });
+        }
+    });
+
+    // --- OBJECTION ANALYTICS ---
+    fastify.get('/api/org/:orgId/objection-analytics', async (request, reply) => {
+        try {
+            const { orgId } = request.params;
+            const days = Math.min(parseInt(request.query.days, 10) || 60, 365);
+
+            if (!orgId) {
+                return reply.code(400).send({ success: false, error: 'Missing organization ID' });
+            }
+
+            if (!(await verifyOrgAccess(request, reply, orgId))) return;
+
+            const data = await DBService.getObjectionAnalytics(orgId, days);
+            return { success: true, ...data };
+        } catch (err) {
+            console.error('[API] Objection analytics error:', err.message);
+            return reply.code(500).send({ success: false, error: 'Failed to get objection analytics' });
+        }
+    });
+
+    // --- SIGNALS ANALYTICS (NEW) ---
+    fastify.get('/api/org/:orgId/signals-analytics', async (request, reply) => {
+        try {
+            const { orgId } = request.params;
+            const days = Math.min(parseInt(request.query.days, 10) || 60, 365);
+
+            if (!orgId) {
+                return reply.code(400).send({ success: false, error: 'Missing organization ID' });
+            }
+
+            if (!(await verifyOrgAccess(request, reply, orgId))) return;
+
+            const data = await DBService.getSignalsAnalytics(orgId, days);
+            return { success: true, ...data };
+        } catch (err) {
+            console.error('[API] Signals analytics error:', err.message);
+            return reply.code(500).send({ success: false, error: 'Failed to get signals analytics' });
+        }
+    });
+
+    // --- ORGANIZATION MINUTES ---
+    fastify.get('/api/org/:orgId/minutes', async (request, reply) => {
+        try {
+            const { orgId } = request.params;
+            const days = Math.min(parseInt(request.query.days, 10) || 30, 365);
+
+            if (!orgId) {
+                return reply.code(400).send({ success: false, error: 'Missing organization ID' });
+            }
+
+            if (!(await verifyOrgAccess(request, reply, orgId))) return;
+
+            const minutes = await DBService.getOrgMinutes(orgId, days);
+            return { success: true, ...minutes };
+        } catch (err) {
+            console.error('[API] Org minutes error:', err.message);
+            return reply.code(500).send({ success: false, error: 'Failed to get org minutes' });
+        }
+    });
+
+    // --- REP MINUTES ---
+    fastify.get('/api/rep/:repId/minutes', async (request, reply) => {
+        try {
+            const auth = await getAuthUser(request, reply);
+            if (!auth) return;
+
+            const { repId } = request.params;
+            const days = Math.min(parseInt(request.query.days, 10) || 30, 365);
+
+            if (!repId) {
+                return reply.code(400).send({ success: false, error: 'Missing rep ID' });
+            }
+
+            const userRole = auth.profile?.role || auth.user?.user_metadata?.role;
+            const isSelf = auth.user.id === repId;
+            const isManager = ['manager', 'super_admin', 'platform_admin'].includes(userRole);
+            if (!isSelf && !isManager) {
+                return reply.code(403).send({ success: false, error: 'Forbidden' });
+            }
+
+            const minutes = await DBService.getRepMinutes(repId, days);
+            return { success: true, ...minutes };
+        } catch (err) {
+            console.error('[API] Rep minutes error:', err.message);
+            return reply.code(500).send({ success: false, error: 'Failed to get rep minutes' });
         }
     });
 

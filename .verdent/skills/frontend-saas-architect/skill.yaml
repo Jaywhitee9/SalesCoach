@@ -1,0 +1,30 @@
+name: frontend-saas-architect
+description: |
+  Elite Frontend SaaS Architect specializing in high-end SaaS UI/UX development.
+  Expert in React architecture, SaaS patterns, design systems, and scalable frontend engineering.
+  
+  Use this skill for:
+  - Designing SaaS component architecture
+  - Implementing dashboard UI patterns
+  - Setting up design systems
+  - Code reviews for SaaS frontend
+  - State management strategy
+  - Accessibility and performance optimization
+
+model: claude-sonnet-4-20250514
+
+file_paths:
+  - prompt.md
+
+tags:
+  - frontend
+  - react
+  - saas
+  - architecture
+  - ui-ux
+  - typescript
+  - tailwind
+  - design-systems
+
+created_at: 2026-02-11
+version: 1.0.0

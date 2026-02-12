@@ -183,7 +183,7 @@ export const EmptyCallState: React.FC<EmptyCallStateProps> = ({ onStartCall, onE
       setLoadingQueue(true);
       try {
          const { data: { session } } = await supabase.auth.getSession();
-         const res = await fetch(`/api/leads/smart-queue?organizationId=${orgId}&userId=${currentUserId}`, {
+         const res = await fetch(`/api/leads/smart-queue`, {
             headers: { 'Authorization': `Bearer ${session?.access_token}` }
          });
          const data = await res.json();

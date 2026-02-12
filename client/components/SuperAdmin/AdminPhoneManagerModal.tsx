@@ -187,7 +187,7 @@ export const AdminPhoneManagerModal: React.FC<Props> = ({ isOpen, onClose, orgId
                         {/* 2. User Numbers Table */}
                         <div>
                             <h4 className="font-medium text-slate-900 dark:text-white flex items-center gap-2 mb-4">
-                                <UsersIcon className="w-4 h-4 text-indigo-500" />
+                                <UserIcon className="w-4 h-4 text-indigo-500" />
                                 מספרים למשתמשים ({config?.users.length || 0})
                             </h4>
 

@@ -34,9 +34,10 @@ async function getSystemUserId() {
 
     // 2. If not found, create in Auth
     console.log('[Supabase] Creating Demo User...');
+    const demoPassword = process.env.SEED_USER_PASSWORD || require('crypto').randomUUID();
     const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
         email: 'sarah@demo.com',
-        password: 'password123',
+        password: demoPassword,
         email_confirm: true,
         user_metadata: { full_name: 'Sarah Cohen' }
     });

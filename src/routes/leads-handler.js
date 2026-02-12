@@ -1,5 +1,6 @@
 const supabase = require('../lib/supabase');
 const { v4: uuidv4 } = require('uuid');
+const { createClient } = require('@supabase/supabase-js');
 
 /**
  * Lead Activities & Status Handler
@@ -7,19 +8,46 @@ const { v4: uuidv4 } = require('uuid');
  * GET /api/activities/recent - Get recent activities
  */
 async function leadsHandler(fastify, options) {
+    
+    // Auth helper
+    async function getAuthUser(request, reply) {
+        const authHeader = request.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            reply.code(401).send({ error: 'Unauthorized' });
+            return null;
+        }
+        const token = authHeader.split(' ')[1];
+        const supabaseAuth = createClient(
+            process.env.SUPABASE_URL,
+            process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY
+        );
+        const { data: { user }, error } = await supabaseAuth.auth.getUser(token);
+        if (error || !user) {
+            reply.code(401).send({ error: 'Unauthorized' });
+            return null;
+        }
+        const { data: profile } = await supabaseAuth
+            .from('profiles')
+            .select('organization_id, role')
+            .eq('id', user.id)
+            .single();
+        return { user, profile };
+    }
 
     // ========================================
     // GET /api/leads/smart-queue
     // Get prioritized calling queue
     // ========================================
     fastify.get('/api/leads/smart-queue', async (request, reply) => {
-        const { organizationId, userId } = request.query;
+        const auth = await getAuthUser(request, reply);
+        if (!auth) return;
 
-        console.log('[SmartQueue] Fetching for:', { organizationId, userId });
-
+        const organizationId = auth.profile?.organization_id;
         if (!organizationId) {
-            return reply.status(400).send({ error: 'Missing organizationId' });
+            return reply.status(403).send({ error: 'No organization assigned' });
         }
+
+        console.log('[SmartQueue] Fetching for org:', organizationId);
 
         try {
             // Fetch open leads for the org
@@ -29,18 +57,15 @@ async function leadsHandler(fastify, options) {
                 .eq('organization_id', organizationId)
                 .neq('status', 'Closed')
                 .neq('status', 'Lost')
-                .order('follow_up_at', { ascending: true, nullsFirst: false }) // Follow ups first
-                .order('priority', { ascending: false }) // Then high priority (assuming text sort works rough, or use specific logic)
+                .order('follow_up_at', { ascending: true, nullsFirst: false })
+                .order('priority', { ascending: false })
                 .order('created_at', { ascending: false })
-                .limit(50); // Batch size
+                .limit(50);
 
             if (error) {
                 console.error('[SmartQueue] Fetch failed:', error);
                 return reply.status(500).send({ error: 'Failed to fetch queue' });
             }
-
-            // Optional: Filter by assignment if needed (e.g., owner_id === userId)
-            // For now, we return all org leads (Shared Queue)
 
             console.log(`[SmartQueue] Found ${leads?.length || 0} leads`);
 
@@ -60,17 +85,25 @@ async function leadsHandler(fastify, options) {
     // Update lead status and create activity log
     // ========================================
     fastify.post('/api/leads/:id/status', async (request, reply) => {
-        const { id: leadId } = request.params;
-        const { status, followUpAt, notes, callSessionId, summaryJson } = request.body;
+        const auth = await getAuthUser(request, reply);
+        if (!auth) return;
 
-        console.log('[LeadStatus] Updating:', { leadId, status, followUpAt, callSessionId });
+        const userOrgId = auth.profile?.organization_id;
+        if (!userOrgId) {
+            return reply.status(403).send({ error: 'No organization assigned' });
+        }
+
+        const { id: leadId } = request.params;
+        const { status, followUpAt, notes, callSessionId, summaryJson, dealAmount } = request.body;
+
+        console.log('[LeadStatus] Updating:', { leadId, status, followUpAt, callSessionId, dealAmount, userId: auth.user.id });
 
         if (!leadId || !status) {
             return reply.status(400).send({ error: 'Missing leadId or status' });
         }
 
         try {
-            // 1. Get lead to retrieve org_id
+            // 1. Get lead to retrieve org_id AND verify ownership
             const { data: lead, error: leadError } = await supabase
                 .from('leads')
                 .select('id, org_id, name')
@@ -82,15 +115,21 @@ async function leadsHandler(fastify, options) {
                 return reply.status(404).send({ error: 'Lead not found' });
             }
 
+            // 2. Verify lead belongs to user's organization
+            if (lead.org_id !== userOrgId) {
+                console.error(`[LeadStatus] IDOR attempt: user org=${userOrgId}, lead org=${lead.org_id}`);
+                return reply.status(403).send({ error: 'Forbidden' });
+            }
+
             // --- DIRECT SERVICE ROLE OPERATIONS (bypass RLS) ---
 
-            // 2. Map status to DB format
+            // 3. Map status to DB format
             const dbStatus = status === 'not_relevant' ? 'Lost'
                 : status === 'follow_up' ? 'Negotiation'
                     : status === 'deal_closed' ? 'Closed'
                         : status;
 
-            // 3. Update Lead
+            // 4. Update Lead
             const updateData = {
                 status: dbStatus,
                 last_activity_at: new Date().toISOString()
@@ -109,6 +148,12 @@ async function leadsHandler(fastify, options) {
                 updateData.last_call_summary = summaryJson;
             }
 
+            // Update deal value if provided (from AI or manual input)
+            if (dealAmount !== null && dealAmount !== undefined && typeof dealAmount === 'number' && dealAmount > 0) {
+                updateData.value = dealAmount;
+                console.log('[LeadStatus] Updating deal value:', dealAmount);
+            }
+
             const { error: updateError } = await supabase
                 .from('leads')
                 .update(updateData)
@@ -121,7 +166,7 @@ async function leadsHandler(fastify, options) {
 
             console.log('[LeadStatus] Lead updated successfully');
 
-            // 4. Create Activity Record
+            // 5. Create Activity Record
             const { error: activityError } = await supabase
                 .from('lead_activities')
                 .insert({
@@ -146,7 +191,7 @@ async function leadsHandler(fastify, options) {
                 console.log('[Activity] Created successfully');
             }
 
-            // 5. Create Task if follow_up with date
+            // 6. Create Task if follow_up with date
             let taskId = null;
             if (status === 'follow_up' && followUpAt) {
                 // Get lead owner for task assignment
@@ -220,7 +265,15 @@ async function leadsHandler(fastify, options) {
     // Get recent activities for sidebar
     // ========================================
     fastify.get('/api/activities/recent', async (request, reply) => {
-        const limit = parseInt(request.query.limit) || 10;
+        const auth = await getAuthUser(request, reply);
+        if (!auth) return;
+
+        const organizationId = auth.profile?.organization_id;
+        if (!organizationId) {
+            return reply.status(403).send({ error: 'No organization assigned' });
+        }
+
+        const limit = Math.min(parseInt(request.query.limit, 10) || 10, 100);
 
         try {
             const { data, error } = await supabase
@@ -238,6 +291,7 @@ async function leadsHandler(fastify, options) {
                         source
                     )
                 `)
+                .eq('org_id', organizationId)
                 .order('created_at', { ascending: false })
                 .limit(limit);
 

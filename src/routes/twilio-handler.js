@@ -2,7 +2,8 @@ const CallManager = require('../services/call-manager');
 const SonioxService = require('../services/soniox-service');
 const CoachingEngine = require('../services/coaching-engine');
 const TenantStore = require('../services/tenant-store');
-const supabase = require('../lib/supabase'); // NEW: Supabase Client
+const CallMonitor = require('../services/call-monitor');
+const supabase = require('../lib/supabase');
 const { v4: uuidv4 } = require('uuid');
 
 async function registerTwilioRoutes(fastify) {
@@ -361,7 +362,7 @@ async function registerTwilioRoutes(fastify) {
 
                 } else if (data.event === 'stop') {
                     console.log(`[Twilio] Stream stopped for ${callSid}`);
-                    // Use endCall to trigger summary generation before cleanup
+                    CallMonitor.onCallEnd(callSid);
                     CallManager.endCall(callSid);
                 }
             } catch (e) {
@@ -396,7 +397,7 @@ async function registerTwilioRoutes(fastify) {
             const segmentId = `${finalRole}-${Math.floor(Date.now() / 3000)}`;
 
             // Broadcast to UI with ALL relevant info
-            CallManager.broadcastToFrontend(callSid, {
+            const transcriptPayload = {
                 type: 'transcript',
                 role: finalRole,
                 track: rawTrack || null,
@@ -405,7 +406,10 @@ async function registerTwilioRoutes(fastify) {
                 text: text,
                 isFinal: isFinal,
                 timestamp: Date.now()
-            });
+            };
+            CallManager.broadcastToFrontend(callSid, transcriptPayload);
+
+            CallMonitor.broadcastTranscriptToListeners(callSid, transcriptPayload);
 
             // 2. Trigger Coaching Logic
             // --- CRITICAL: TRIGGER CONDITIONS ---
@@ -413,6 +417,55 @@ async function registerTwilioRoutes(fastify) {
             // b) Must be CUSTOMER
             if (isFinal && role === 'customer') {
                 const call = CallManager.getCall(callSid);
+
+                // === SMART TRIGGERING: Check if coaching is actually needed ===
+                const shouldTriggerCoaching = () => {
+                    // Always allow if no coaching has been given yet
+                    if (!call.lastCoachingTime) return true;
+
+                    // Check if coaching is already in progress
+                    if (call.coachingPending) {
+                        console.log(`[Coaching-Skip] Coaching already in progress for ${callSid}`);
+                        return false;
+                    }
+
+                    // CRITICAL KEYWORDS: Always trigger on objections, buying signals, competitors
+                    const criticalKeywords = [
+                        'יקר', 'מחיר', 'תקציב', 'יקר מדי',  // Price objections
+                        'לא בטוח', 'צריך לחשוב', 'להתייעץ',  // Decision delay
+                        'לא מעניין', 'לא רלוונטי',  // Negative signals
+                        'בואו נסגור', 'מתי מתחילים', 'אני מוכן',  // Strong buying signals
+                        'salesforce', 'hubspot', 'pipedrive', 'המערכת הנוכחית',  // Competitors
+                        'כבר יש לנו', 'עובדים עם'  // Competition
+                    ];
+                    
+                    const textLower = text.toLowerCase();
+                    const hasCriticalKeyword = criticalKeywords.some(keyword => textLower.includes(keyword));
+                    
+                    if (hasCriticalKeyword) {
+                        console.log(`[Coaching-Trigger-Critical] Detected critical keyword in: "${text.substring(0, 50)}..."`);
+                        return true;
+                    }
+
+                    // Allow if enough new content has accumulated (at least 2 exchanges since last coaching)
+                    const totalTranscripts = call.transcripts.customer.length + call.transcripts.agent.length;
+                    const transcriptsAtLastCoaching = call.transcriptsAtLastCoaching || 0;
+                    const newExchanges = totalTranscripts - transcriptsAtLastCoaching;
+
+                    if (newExchanges < 2) {
+                        console.log(`[Coaching-Skip] Only ${newExchanges} new exchanges since last coaching`);
+                        return false;
+                    }
+
+                    return true;
+                };
+
+                if (!shouldTriggerCoaching()) {
+                    return;
+                }
+
+                call.coachingPending = true;
+                call.transcriptsAtLastCoaching = call.transcripts.customer.length + call.transcripts.agent.length;
 
                 // Extra safety check in logs
                 console.log(`[Coaching-Trigger] Valid Customer Final: "${text.substring(0, 20)}..."`);
@@ -462,24 +515,56 @@ async function registerTwilioRoutes(fastify) {
                 ].sort((a, b) => a.timestamp - b.timestamp);
 
                 const recentContext = mixedHistory.slice(-10);
-                const advice = await CoachingEngine.generateCoaching(call, account.config, recentContext);
 
-                if (advice) {
-                    call.lastCoachingTime = Date.now();
-                    call.coachingHistory.push({
-                        type: advice.type,
-                        message: advice.message,
-                        timestamp: Date.now()
-                    });
+                // === RUN COACHING IN BACKGROUND (NON-BLOCKING) ===
+                CoachingEngine.generateCoaching(call, account.config, recentContext)
+                    .then(advice => {
+                        call.coachingPending = false;
+                        call.lastCoachingTime = Date.now();
 
-                    CallManager.broadcastToFrontend(callSid, {
-                        type: 'coaching',
-                        severity: advice.severity || 'info',
-                        role: 'system',
-                        message: advice.message,
-                        suggested_reply: advice.suggested_reply
+                        if (advice) {
+                            call.coachingHistory.push({
+                                type: advice.type,
+                                message: advice.message,
+                                timestamp: Date.now()
+                            });
+
+                            CallManager.broadcastToFrontend(callSid, {
+                                type: 'coaching',
+                                severity: advice.severity || 'info',
+                                role: 'system',
+                                message: advice.message,
+                                suggested_reply: advice.suggested_reply
+                            });
+
+                            const resolvedOrgId = organizationId || call.context?.agent?.organizationId;
+                            const agentName = call.context?.agent?.name || 'Unknown';
+                            const leadName = account.config?.leadProfile?.name || 'Unknown';
+
+                            CallMonitor.onCoachingResult(callSid, advice, {
+                                agentId: call.agentId,
+                                agentName,
+                                organizationId: resolvedOrgId,
+                                leadName,
+                                callDuration: Date.now() - call.startTime
+                            });
+
+                            CallMonitor.broadcastCoachingToListeners(callSid, {
+                                score: advice.score,
+                                stage: advice.stage,
+                                message: advice.message,
+                                suggested_reply: advice.suggested_reply,
+                                severity: advice.severity,
+                                score_breakdown: advice.score_breakdown,
+                                signals: advice.signals,
+                                battle_card: advice.battle_card
+                            });
+                        }
+                    })
+                    .catch(err => {
+                        call.coachingPending = false;
+                        console.error(`[Coaching] Background coaching failed for ${callSid}:`, err.message);
                     });
-                }
             }
         } catch (err) {
             console.warn(`[Handler] Error processing transcript for ${callSid}:`, err.message);

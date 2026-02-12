@@ -107,13 +107,16 @@ export const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
     }
 
     // Calculate disposition percentages
-    const totalDispositions = Object.values(metrics.dispositions).reduce((a, b) => a + b, 0);
-    const dispositionPercentages = Object.entries(metrics.dispositions).map(([key, value]) => ({
-        key,
-        label: dispositionLabels[key] || key,
-        value,
-        percentage: totalDispositions > 0 ? Math.round((value / totalDispositions) * 100) : 0
-    })).sort((a, b) => b.value - a.value);
+    const totalDispositions = (Object.values(metrics.dispositions) as number[]).reduce((a, b) => a + b, 0);
+    const dispositionPercentages = Object.entries(metrics.dispositions).map(([key, val]) => {
+        const numVal = val as number;
+        return {
+            key,
+            label: dispositionLabels[key] || key,
+            value: numVal,
+            percentage: totalDispositions > 0 ? Math.round((numVal / totalDispositions) * 100) : 0
+        };
+    }).sort((a, b) => b.value - a.value);
 
     if (compact) {
         return (
@@ -179,7 +182,7 @@ export const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
                         אחוז מענה
                     </div>
                     <div className={`text-2xl font-bold ${metrics.connectRate >= 50 ? 'text-green-600' :
-                            metrics.connectRate >= 30 ? 'text-yellow-600' : 'text-red-600'
+                        metrics.connectRate >= 30 ? 'text-yellow-600' : 'text-red-600'
                         }`}>
                         {metrics.connectRate}%
                     </div>
@@ -218,8 +221,8 @@ export const PerformanceMetrics: React.FC<PerformanceMetricsProps> = ({
                             <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                                 <div
                                     className={`h-full rounded-full ${disp.key === 'answered' ? 'bg-green-500' :
-                                            disp.key === 'no_answer' ? 'bg-yellow-500' :
-                                                disp.key === 'rejected' ? 'bg-red-500' : 'bg-slate-400'
+                                        disp.key === 'no_answer' ? 'bg-yellow-500' :
+                                            disp.key === 'rejected' ? 'bg-red-500' : 'bg-slate-400'
                                         }`}
                                     style={{ width: `${disp.percentage}%` }}
                                 />
