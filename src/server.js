@@ -16,6 +16,15 @@ fastify.register(require('@fastify/static'), {
     prefix: '/',
 });
 
+// Global Auth Hook
+fastify.addHook('onRequest', async (request, reply) => {
+    // Only apply to API routes to avoid overhead on static files
+    if (request.url.startsWith('/api') || request.url.startsWith('/voice')) {
+        const authenticate = require('./middleware/authenticate');
+        await authenticate(request, reply);
+    }
+});
+
 // Routes
 fastify.register(require('./routes/twilio-handler'));
 fastify.register(require('./routes/api-handler'));
