@@ -27,101 +27,80 @@ export const AIInsightsCard: React.FC<AIInsightsCardProps> = ({ insights, loadin
     return icons[iconName] || Lightbulb;
   };
 
-  const getColorClasses = (type: string) => {
+  const getTypeStyles = (type: string) => {
     switch (type) {
       case 'warning':
-        return {
-          bg: 'bg-amber-50 dark:bg-amber-900/10',
-          border: 'border-amber-200 dark:border-amber-800',
-          icon: 'text-amber-600 dark:text-amber-400',
-          title: 'text-amber-900 dark:text-amber-100'
-        };
+        return { iconColor: '#d97706', dotColor: '#f59e0b', bgHover: '#fffbeb' };
       case 'opportunity':
-        return {
-          bg: 'bg-emerald-50 dark:bg-emerald-900/10',
-          border: 'border-emerald-200 dark:border-emerald-800',
-          icon: 'text-emerald-600 dark:text-emerald-400',
-          title: 'text-emerald-900 dark:text-emerald-100'
-        };
+        return { iconColor: '#059669', dotColor: '#10b981', bgHover: '#ecfdf5' };
       case 'success':
-        return {
-          bg: 'bg-blue-50 dark:bg-blue-900/10',
-          border: 'border-blue-200 dark:border-blue-800',
-          icon: 'text-blue-600 dark:text-blue-400',
-          title: 'text-blue-900 dark:text-blue-100'
-        };
+        return { iconColor: '#2563eb', dotColor: '#3b82f6', bgHover: '#eff6ff' };
       default:
-        return {
-          bg: 'bg-slate-50 dark:bg-slate-800',
-          border: 'border-slate-200 dark:border-slate-700',
-          icon: 'text-slate-600 dark:text-slate-400',
-          title: 'text-slate-900 dark:text-slate-100'
-        };
+        return { iconColor: '#64748b', dotColor: '#94a3b8', bgHover: '#f8fafc' };
     }
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
+    <div className="bg-white rounded-lg overflow-hidden" style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-blue-50 dark:bg-blue-950/30 flex items-center justify-center">
-            <Activity className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-          </div>
-          <div>
-            <h3 className="font-bold text-slate-900 dark:text-white text-base">המלצות</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">פעולות מומלצות</p>
-          </div>
+      <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: '1px solid #f1f5f9' }}>
+        <div className="flex items-center gap-2.5">
+          <Activity className="w-4 h-4" style={{ color: '#2563eb' }} strokeWidth={1.5} />
+          <h3 className="text-[14px] font-semibold" style={{ color: '#1e293b' }}>המלצות</h3>
         </div>
         {insights.length > 0 && (
-          <span className="text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-1 rounded-md">
+          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full" style={{ background: '#f1f5f9', color: '#64748b' }}>
             {insights.length}
           </span>
         )}
       </div>
 
-        {/* Insights List */}
-        <div className="space-y-3">
-          {loading ? (
-            <div className="text-center py-6 text-slate-400">
-              <div className="animate-spin w-6 h-6 border-2 border-slate-300 dark:border-slate-700 border-t-blue-600 rounded-full mx-auto mb-2"></div>
-              <p className="text-sm">טוען...</p>
-            </div>
-          ) : insights.length === 0 ? (
-            <div className="text-center py-6">
-              <div className="w-14 h-14 mx-auto mb-3 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                <Lightbulb className="w-7 h-7 text-slate-400 dark:text-slate-500" />
-              </div>
-              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">הכל תקין</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">אין המלצות כרגע</p>
-            </div>
-          ) : (
-            insights.map((insight, index) => {
+      {/* Content */}
+      <div className="px-5 py-4">
+        {loading ? (
+          <div className="flex items-center justify-center py-6 gap-2">
+            <div className="w-4 h-4 rounded-full animate-spin" style={{ border: '2px solid #e5e7eb', borderTopColor: '#2563eb' }} />
+            <span className="text-[13px]" style={{ color: '#94a3b8' }}>טוען...</span>
+          </div>
+        ) : insights.length === 0 ? (
+          <div className="text-center py-8">
+            <Lightbulb className="w-6 h-6 mx-auto mb-2" style={{ color: '#d1d5db' }} strokeWidth={1.5} />
+            <p className="text-[13px] font-medium" style={{ color: '#64748b' }}>הכל תקין</p>
+            <p className="text-[12px] mt-0.5" style={{ color: '#94a3b8' }}>אין המלצות כרגע</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {insights.map((insight, index) => {
               const Icon = getIcon(insight.icon);
-              const colors = getColorClasses(insight.type);
-              
+              const styles = getTypeStyles(insight.type);
+
               return (
                 <div
                   key={index}
-                  className={`p-3.5 rounded-lg border ${colors.bg} ${colors.border} hover:shadow-sm transition-shadow`}
+                  className="p-3 rounded-md transition-colors cursor-default hover:bg-[#f8fafc]"
+                  style={{ border: '1px solid transparent' }}
+                  onMouseEnter={e => (e.currentTarget.style.borderColor = '#e5e7eb')}
+                  onMouseLeave={e => (e.currentTarget.style.borderColor = 'transparent')}
                 >
                   <div className="flex items-start gap-3">
-                    <div className={`w-9 h-9 rounded-lg ${colors.bg} flex items-center justify-center flex-shrink-0`}>
-                      <Icon className={`w-4 h-4 ${colors.icon}`} />
-                    </div>
+                    <Icon className="w-4 h-4 mt-0.5 shrink-0" style={{ color: styles.iconColor }} strokeWidth={1.5} />
                     <div className="flex-1 min-w-0">
-                      <h4 className={`font-semibold text-sm ${colors.title} mb-1`}>{insight.title}</h4>
-                      <p className="text-xs text-slate-600 dark:text-slate-400 mb-2 leading-relaxed">{insight.description}</p>
-                      <button className={`text-xs font-medium ${colors.icon} hover:underline`}>
+                      <h4 className="text-[13px] font-semibold leading-snug" style={{ color: '#1e293b' }}>{insight.title}</h4>
+                      <p className="text-[12px] mt-0.5 leading-relaxed" style={{ color: '#64748b' }}>{insight.description}</p>
+                      <button
+                        className="text-[12px] font-medium mt-1.5 hover:underline"
+                        style={{ color: styles.iconColor }}
+                      >
                         {insight.action} →
                       </button>
                     </div>
                   </div>
                 </div>
               );
-            })
-          )}
-        </div>
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 };

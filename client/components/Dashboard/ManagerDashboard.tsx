@@ -10,7 +10,12 @@ import {
   CheckCircle2,
   ChevronDown,
   Loader2,
-  Download
+  Download,
+  Clock,
+  ArrowUpRight,
+  ArrowDownRight,
+  ArrowRight,
+  Settings
 } from 'lucide-react';
 import { Button } from '../Common/Button';
 import { Badge } from '../Common/Badge';
@@ -102,11 +107,6 @@ const ManagerDashboardInner: React.FC<ManagerDashboardProps> = ({ isDarkMode, or
       case 'חודש נוכחי': return 30;
       default: return 7;
     }
-  };
-
-  const getBarStyles = (index: number) => {
-    const opacities = [0.4, 0.55, 0.7, 0.85, 1];
-    return { backgroundColor: isDarkMode ? '#6366f1' : '#4f46e5', opacity: opacities[index] || 1 };
   };
 
   const maxPipelineValue = Math.max(...(funnelData.length ? funnelData.map(s => s.value) : [0])) * 1.1 || 1000;
@@ -243,267 +243,300 @@ const ManagerDashboardInner: React.FC<ManagerDashboardProps> = ({ isDarkMode, or
     document.body.removeChild(link);
   };
 
+  // ── Loading State ──
   if (loading && kpis.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center h-full bg-slate-50 dark:bg-slate-950">
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
+      <div className="flex-1 flex items-center justify-center h-full" style={{ background: '#fafbfc' }}>
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center" style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+            <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#2563eb' }} />
+          </div>
+          <span className="text-[13px]" style={{ color: '#94a3b8' }}>טוען נתונים...</span>
+        </div>
       </div>
     );
   }
 
+  // ── Helpers ──
+  const kpiIconConfigs = [
+    { icon: Phone, color: '#6366f1' },
+    { icon: Calendar, color: '#2563eb' },
+    { icon: Target, color: '#059669' },
+    { icon: Award, color: '#94a3b8' },
+  ];
+
+  const getTrendIcon = (dir: string) => {
+    if (dir === 'up') return <ArrowUpRight className="w-3 h-3" />;
+    if (dir === 'down') return <ArrowDownRight className="w-3 h-3" />;
+    return <ArrowRight className="w-3 h-3" />;
+  };
+  const getTrendColor = (dir: string) => {
+    if (dir === 'up') return '#059669';
+    if (dir === 'down') return '#dc2626';
+    return '#94a3b8';
+  };
+
+  // ── RENDER ──
   return (
-    <div className="flex-1 overflow-y-auto p-6 lg:p-8 bg-slate-50 dark:bg-slate-950">
+    <div className="flex-1 overflow-y-auto" style={{ background: '#fafbfc' }}>
+      <div className="max-w-[1440px] mx-auto px-6 lg:px-10 py-8">
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{greeting}, {userName || 'מנהל'}</h1>
-            <Badge variant="brand">{centerType === 'support' ? 'מנהל שירות' : 'מנהל מכירות'}</Badge>
+        {/* ─── HEADER ─── */}
+        <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
+          <div>
+            <h1 className="text-[22px] font-semibold leading-tight" style={{ color: '#0f172a' }}>
+              {greeting}, {userName || 'מנהל'}
+            </h1>
+            <p className="text-[13px] mt-1" style={{ color: '#64748b' }}>
+              {centerType === 'support' ? 'סקירה כוללת על ביצועי המוקד ואיכות השירות' : 'סקירה כוללת על ביצועי הצוות והפייפליין'}
+            </p>
           </div>
-          <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-            {centerType === 'support' ? 'סקירה כוללת על ביצועי המוקד ואיכות השירות.' : 'סקירה כוללת על ביצועי הצוות והפייפליין.'}
-          </p>
-        </div>
 
-        <div className="flex items-center gap-3 relative z-20">
-          <DashboardSettings />
+          {/* ─── TOOLBAR ─── */}
+          <div className="flex items-center gap-2 relative z-20">
+            <DashboardSettings />
 
-          {/* Team Dropdown */}
-          <div className="relative">
-            <Button
-              variant="secondary"
-              className="hidden sm:flex bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 min-w-[140px] justify-between items-center"
-              onClick={() => { setIsTeamOpen(!isTeamOpen); setIsTimeOpen(false); }}
-            >
-              <div className="flex items-center">
-                <Users className="w-4 h-4 ml-2" />
-                <span className="truncate max-w-[100px] text-sm">
-                  {selectedTeam === 'all' ? 'כל הצוות' : teamMembers.find(m => m.id === selectedTeam)?.name}
-                </span>
-              </div>
-              <ChevronDown className={`w-3.5 h-3.5 mr-2 opacity-50 transition-transform duration-200 ${isTeamOpen ? 'rotate-180' : ''}`} />
-            </Button>
-            {isTeamOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setIsTeamOpen(false)} />
-                <div className="absolute top-full left-0 mt-2 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-20 py-1.5 overflow-hidden">
-                  <button
-                    onClick={() => { setSelectedTeam('all'); setIsTeamOpen(false); }}
-                    className={`w-full text-right px-4 py-2.5 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-between ${selectedTeam === 'all' ? 'bg-brand-50/50 dark:bg-brand-900/10 text-brand-600 dark:text-brand-400' : 'text-slate-700 dark:text-slate-200'}`}
-                  >
-                    <span className="font-medium">כל הצוות</span>
-                    {selectedTeam === 'all' && <CheckCircle2 className="w-4 h-4" />}
-                  </button>
-                  <div className="h-px bg-slate-100 dark:bg-slate-800 my-1" />
-                  <div className="max-h-[240px] overflow-y-auto">
-                    {teamMembers.map(member => (
+            {/* Team Filter */}
+            <div className="relative">
+              <button
+                className="hidden sm:inline-flex items-center justify-between gap-2 h-9 px-3 bg-white rounded-md text-[13px] font-medium hover:bg-[#f8fafc] transition-all min-w-[130px]"
+                style={{ border: '1px solid #e2e8f0', color: '#475569' }}
+                onClick={() => { setIsTeamOpen(!isTeamOpen); setIsTimeOpen(false); }}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Users className="w-[14px] h-[14px]" style={{ color: '#94a3b8' }} />
+                  <span className="truncate max-w-[80px]">
+                    {selectedTeam === 'all' ? 'כל הצוות' : teamMembers.find(m => m.id === selectedTeam)?.name}
+                  </span>
+                </div>
+                <ChevronDown className={`w-3 h-3 transition-transform ${isTeamOpen ? 'rotate-180' : ''}`} style={{ color: '#94a3b8' }} />
+              </button>
+              {isTeamOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setIsTeamOpen(false)} />
+                  <div className="absolute top-full left-0 mt-1.5 w-52 bg-white rounded-lg z-20 py-1 overflow-hidden" style={{ border: '1px solid #e2e8f0', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
+                    <button
+                      onClick={() => { setSelectedTeam('all'); setIsTeamOpen(false); }}
+                      className="w-full text-right px-3.5 py-2 text-[13px] transition-colors flex items-center justify-between"
+                      style={{ background: selectedTeam === 'all' ? '#e0f2fe' : 'transparent', color: selectedTeam === 'all' ? '#0284c7' : '#475569' }}
+                    >
+                      <span>כל הצוות</span>
+                      {selectedTeam === 'all' && <CheckCircle2 className="w-3.5 h-3.5" />}
+                    </button>
+                    <div style={{ height: '1px', background: '#f1f5f9', margin: '2px 0' }} />
+                    <div className="max-h-[200px] overflow-y-auto">
+                      {teamMembers.map(member => (
+                        <button
+                          key={member.id}
+                          onClick={() => { setSelectedTeam(member.id); setIsTeamOpen(false); }}
+                          className="w-full text-right px-3.5 py-2 text-[13px] transition-colors flex items-center justify-between hover:bg-[#f1f5f9]"
+                          style={{ background: selectedTeam === member.id ? '#e0f2fe' : 'transparent', color: selectedTeam === member.id ? '#0284c7' : '#475569' }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <img src={sanitizeUrl(member.avatar) || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'} className="w-5 h-5 rounded-full object-cover" alt="" />
+                            <span className="truncate">{member.name}</span>
+                          </div>
+                          {selectedTeam === member.id && <CheckCircle2 className="w-3.5 h-3.5" />}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Date Filter */}
+            <div className="relative">
+              <button
+                className="inline-flex items-center justify-between gap-2 h-9 px-3 bg-white rounded-md text-[13px] font-medium hover:bg-[#f8fafc] transition-all min-w-[130px]"
+                style={{ border: '1px solid #e2e8f0', color: '#475569' }}
+                onClick={() => { setIsTimeOpen(!isTimeOpen); setIsTeamOpen(false); }}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="w-[14px] h-[14px]" style={{ color: '#94a3b8' }} />
+                  <span>{dateRange}</span>
+                </div>
+                <ChevronDown className={`w-3 h-3 transition-transform ${isTimeOpen ? 'rotate-180' : ''}`} style={{ color: '#94a3b8' }} />
+              </button>
+              {isTimeOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setIsTimeOpen(false)} />
+                  <div className="absolute top-full left-0 mt-1.5 w-44 bg-white rounded-lg z-20 py-1" style={{ border: '1px solid #e2e8f0', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
+                    {['היום', 'אתמול', '7 ימים אחרונים', '30 ימים אחרונים', 'חודש נוכחי'].map(range => (
                       <button
-                        key={member.id}
-                        onClick={() => { setSelectedTeam(member.id); setIsTeamOpen(false); }}
-                        className={`w-full text-right px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-between ${selectedTeam === member.id ? 'bg-brand-50/50 dark:bg-brand-900/10 text-brand-600 dark:text-brand-400' : 'text-slate-700 dark:text-slate-200'}`}
+                        key={range}
+                        onClick={() => { setDateRange(range); setIsTimeOpen(false); }}
+                        className="w-full text-right px-3.5 py-2 text-[13px] transition-colors flex items-center justify-between hover:bg-[#f1f5f9]"
+                        style={{ background: dateRange === range ? '#e0f2fe' : 'transparent', color: dateRange === range ? '#0284c7' : '#475569', fontWeight: dateRange === range ? 500 : 400 }}
                       >
-                        <div className="flex items-center gap-3">
-                          <img src={sanitizeUrl(member.avatar) || 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'} className="w-6 h-6 rounded-full border border-slate-100 dark:border-slate-700 object-cover" alt="" />
-                          <span className="truncate">{member.name}</span>
-                        </div>
-                        {selectedTeam === member.id && <CheckCircle2 className="w-4 h-4" />}
+                        <span>{range}</span>
+                        {dateRange === range && <CheckCircle2 className="w-3.5 h-3.5" />}
                       </button>
                     ))}
                   </div>
-                </div>
-              </>
-            )}
-          </div>
+                </>
+              )}
+            </div>
 
-          {/* Time Dropdown */}
-          <div className="relative">
-            <Button
-              variant="secondary"
-              className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 min-w-[140px] justify-between items-center"
-              onClick={() => { setIsTimeOpen(!isTimeOpen); setIsTeamOpen(false); }}
+            {/* Export */}
+            <button
+              onClick={exportToCSV}
+              className="h-9 px-3 bg-white rounded-md text-[13px] font-medium hover:bg-[#f8fafc] transition-all inline-flex items-center gap-1.5"
+              style={{ border: '1px solid #e2e8f0', color: '#475569' }}
+              title="ייצוא דוח"
             >
-              <div className="flex items-center">
-                <Calendar className="w-4 h-4 ml-2" />
-                <span className="text-sm">{dateRange}</span>
-              </div>
-              <ChevronDown className={`w-3.5 h-3.5 mr-2 opacity-50 transition-transform duration-200 ${isTimeOpen ? 'rotate-180' : ''}`} />
-            </Button>
-            {isTimeOpen && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setIsTimeOpen(false)} />
-                <div className="absolute top-full left-0 mt-2 w-48 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-xl z-20 py-1.5">
-                  {['היום', 'אתמול', '7 ימים אחרונים', '30 ימים אחרונים', 'חודש נוכחי'].map(range => (
-                    <button
-                      key={range}
-                      onClick={() => { setDateRange(range); setIsTimeOpen(false); }}
-                      className={`w-full text-right px-4 py-2 text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors flex items-center justify-between ${dateRange === range ? 'text-brand-600 bg-brand-50/50 dark:bg-brand-900/10 font-medium' : 'text-slate-700 dark:text-slate-200'}`}
-                    >
-                      <span>{range}</span>
-                      {dateRange === range && <CheckCircle2 className="w-4 h-4" />}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+              <Download className="w-[14px] h-[14px]" />
+              <span className="hidden sm:inline">ייצוא</span>
+            </button>
           </div>
-
-          <Button
-            variant="secondary"
-            className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-            onClick={exportToCSV}
-            title="ייצוא דוח"
-          >
-            <Download className="w-4 h-4 ml-2" />
-            <span className="text-sm hidden sm:inline">ייצוא</span>
-          </Button>
         </div>
-      </div>
 
-      {/* 1. Top KPIs Row */}
-      {!hiddenWidgets.includes('kpis') && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-          {kpis.map((kpi, index) => {
-            const Icon = kpi.icon || TrendingUp;
-            const iconColors = [
-              'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400',
-              'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400',
-              'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400',
-              'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400'
-            ];
-            return (
-              <div key={index} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
-                <div className="flex items-center justify-between mb-4">
-                  <span className="text-sm font-medium text-slate-600 dark:text-slate-400">{kpi.label}</span>
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${iconColors[index] || iconColors[0]}`}>
-                    <Icon className="w-5 h-5" />
+        {/* ─── KPI CARDS ─── */}
+        {!hiddenWidgets.includes('kpis') && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+            {kpis.map((kpi, index) => {
+              const config = kpiIconConfigs[index] || kpiIconConfigs[0];
+              const KpiIcon = kpi.icon || config.icon;
+              return (
+                <div
+                  key={index}
+                  className="bg-white rounded-lg p-5 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition-all duration-200 cursor-default"
+                  style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}
+                >
+                  <KpiIcon className="w-5 h-5 mb-4" style={{ color: config.color }} strokeWidth={1.5} />
+                  <div className="text-[40px] font-bold leading-none" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+                    {kpi.value}
+                  </div>
+                  <div className="text-[13px] font-medium mt-2" style={{ color: '#64748b' }}>{kpi.label}</div>
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <span className="text-[12px] font-medium flex items-center gap-0.5" style={{ color: getTrendColor(kpi.trendDirection || 'neutral') }}>
+                      {getTrendIcon(kpi.trendDirection || 'neutral')}
+                      {kpi.trend || ''}
+                    </span>
+                    <span className="text-[12px]" style={{ color: '#94a3b8' }}>{kpi.subtext}</span>
                   </div>
                 </div>
-                <div className="flex flex-col">
-                  <span className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{kpi.value}</span>
-                  <span className="text-xs text-slate-500 dark:text-slate-400">{kpi.subtext}</span>
-                </div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
+        )}
+
+        {/* ─── MIDDLE SECTION: Insights (70%) + Goals (30%) ─── */}
+        <div className="grid grid-cols-1 lg:grid-cols-10 gap-5 mb-8">
+          <div className="lg:col-span-7 space-y-5">
+            {!hiddenWidgets.includes('ai-insights') && <AIInsightsCard insights={insights} loading={loading} />}
+            {!hiddenWidgets.includes('live-activity') && <LiveActivityCard activities={liveActivity} loading={loading} />}
+          </div>
+          <div className="lg:col-span-3">
+            {!hiddenWidgets.includes('goal-progress') && (
+              <GoalProgressCard
+                teamProgress={goalProgress || { calls: { current: 0, target: 10, percentage: 0 }, meetings: { current: 0, target: 3, percentage: 0 }, deals: { current: 0, target: 1, percentage: 0 } }}
+                loading={loading}
+              />
+            )}
+          </div>
         </div>
-      )}
 
-      {/* 2. Middle Row: 3 columns - Live Activity | Goals | Recommendations */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
-        {!hiddenWidgets.includes('live-activity') && <LiveActivityCard activities={liveActivity} loading={loading} />}
-        {!hiddenWidgets.includes('goal-progress') && (
-          <GoalProgressCard
-            teamProgress={goalProgress || { calls: { current: 0, target: 10, percentage: 0 }, meetings: { current: 0, target: 3, percentage: 0 }, deals: { current: 0, target: 1, percentage: 0 } }}
-            loading={loading}
-          />
-        )}
-        {!hiddenWidgets.includes('ai-insights') && <AIInsightsCard insights={insights} loading={loading} />}
-      </div>
+        {/* ─── BOTTOM SECTION: 3 Columns ─── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-      {/* 3. Bottom Collapsible Sections */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Pipeline & Revenue */}
-        {!hiddenWidgets.includes('pipeline') && (
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-            <button onClick={() => toggleSection('pipeline')} className="w-full px-5 py-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 flex items-center justify-center">
-                  <BarChart3 className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+          {/* Column 1: Pipeline & Revenue */}
+          {!hiddenWidgets.includes('pipeline') && (
+            <div className="bg-white rounded-lg overflow-hidden" style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+              <button onClick={() => toggleSection('pipeline')} className="w-full px-5 py-4 flex items-center justify-between hover:bg-[#f8fafc] transition-colors">
+                <div className="flex items-center gap-2.5">
+                  <BarChart3 className="w-4 h-4" style={{ color: '#6366f1' }} strokeWidth={1.5} />
+                  <h3 className="text-[14px] font-semibold" style={{ color: '#1e293b' }}>פייפליין והכנסות</h3>
                 </div>
-                <h3 className="font-bold text-slate-900 dark:text-white text-sm">פייפליין והכנסות</h3>
-                <span className="text-xs font-medium bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full">החודש</span>
-              </div>
-              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${expandedSections.pipeline ? 'rotate-180' : ''}`} />
-            </button>
-            {!expandedSections.pipeline && (
-              <div className="px-5 pb-4">
-                <span className="text-2xl font-bold text-slate-900 dark:text-white ltr">₪{funnelData.reduce((s, f) => s + (f.value || 0), 0).toLocaleString()}</span>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">סה"כ בפייפליין</p>
-              </div>
-            )}
-            {expandedSections.pipeline && (
-              <div className="px-5 pb-5 space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4">
-                {funnelData.length === 0 ? (
-                  <p className="text-sm text-slate-400 text-center py-3">אין נתוני פייפליין</p>
-                ) : (
-                  funnelData.map((stage, index) => (
-                    <div key={index} className="flex items-center gap-3">
-                      <span className="w-20 text-xs font-medium text-slate-600 dark:text-slate-400 truncate text-right shrink-0">{stage.name}</span>
-                      <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${(stage.value / maxPipelineValue) * 100}%`, ...getBarStyles(index) }} />
+                <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.pipeline ? 'rotate-180' : ''}`} style={{ color: '#94a3b8' }} />
+              </button>
+              {!expandedSections.pipeline && (
+                <div className="px-5 pb-4">
+                  <span className="text-[28px] font-bold ltr" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>₪{funnelData.reduce((s, f) => s + (f.value || 0), 0).toLocaleString()}</span>
+                  <p className="text-[12px] mt-0.5" style={{ color: '#94a3b8' }}>סה"כ בפייפליין</p>
+                </div>
+              )}
+              {expandedSections.pipeline && (
+                <div className="px-5 pb-5 space-y-3 pt-4" style={{ borderTop: '1px solid #f1f5f9' }}>
+                  {funnelData.length === 0 ? (
+                    <p className="text-[13px] text-center py-4" style={{ color: '#94a3b8' }}>אין נתוני פייפליין</p>
+                  ) : (
+                    funnelData.map((stage, index) => (
+                      <div key={index} className="flex items-center gap-3">
+                        <span className="w-16 text-[12px] font-medium truncate text-right shrink-0" style={{ color: '#64748b' }}>{stage.name}</span>
+                        <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: '#e5e7eb' }}>
+                          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${(stage.value / maxPipelineValue) * 100}%`, backgroundColor: '#6366f1', opacity: 0.6 + (index * 0.1) }} />
+                        </div>
+                        <span className="text-[12px] font-semibold w-14 text-left shrink-0 ltr" style={{ color: '#334155', fontVariantNumeric: 'tabular-nums' }}>₪{(stage.value / 1000).toLocaleString()}k</span>
                       </div>
-                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300 w-16 text-left shrink-0 ltr tabular-nums">₪{(stage.value / 1000).toLocaleString()}k</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Team Performance */}
-        {!hiddenWidgets.includes('team-performance') && (
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-            <button onClick={() => toggleSection('team')} className="w-full px-5 py-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center">
-                  <Users className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                    ))
+                  )}
                 </div>
-                <h3 className="font-bold text-slate-900 dark:text-white text-sm">ביצועי צוות</h3>
-              </div>
-              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${expandedSections.team ? 'rotate-180' : ''}`} />
-            </button>
-            {!expandedSections.team && (
-              <div className="px-5 pb-4">
-                <span className="text-2xl font-bold text-slate-900 dark:text-white">{teamMembers.length}</span>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">נציגים פעילים</p>
-              </div>
-            )}
-            {expandedSections.team && (
-              <div className="border-t border-slate-100 dark:border-slate-800">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-right border-collapse">
-                    <thead className="text-[11px] text-slate-500 bg-slate-50/80 dark:bg-slate-800/50">
-                      <tr>
-                        <th className="py-2.5 px-3 font-medium">נציג</th>
-                        <th className="py-2.5 px-2 font-medium text-center">שיחות</th>
-                        <th className="py-2.5 px-3 font-medium text-left">הכנסות</th>
-                      </tr>
-                    </thead>
-                    <tbody className="text-sm">
-                      {teamPerformance.length === 0 ? (
-                        <tr><td colSpan={3} className="text-center py-6 text-slate-400 text-xs">אין נתוני ביצועים זמינים</td></tr>
-                      ) : (
-                        teamPerformance.slice(0, 5).map((member) => (
-                          <tr key={member.id} className="border-b border-slate-50 dark:border-slate-800/50 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                            <td className="py-2.5 px-3">
-                              <div className="flex items-center gap-2">
-                                <img
-                                  src={sanitizeUrl(member.avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}&background=random&size=32`}
-                                  alt=""
-                                  className="w-6 h-6 rounded-full"
-                                />
-                                <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate max-w-[80px]">{member.name}</span>
-                              </div>
-                            </td>
-                            <td className="py-2.5 px-2 text-center text-xs font-bold text-slate-700 dark:text-slate-300">{member.calls || 0}</td>
-                            <td className="py-2.5 px-3 text-left text-xs font-bold text-emerald-600 dark:text-emerald-400 ltr">₪{(member.revenue || 0).toLocaleString()}</td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+              )}
+            </div>
+          )}
 
-        {/* Attention Queue - Smart Real-Time Monitoring */}
-        {!hiddenWidgets.includes('attention-queue') && (
-          <NeedsAttentionCard orgId={orgId} />
-        )}
+          {/* Column 2: Team Performance */}
+          {!hiddenWidgets.includes('team-performance') && (
+            <div className="bg-white rounded-lg overflow-hidden" style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+              <button onClick={() => toggleSection('team')} className="w-full px-5 py-4 flex items-center justify-between hover:bg-[#f8fafc] transition-colors">
+                <div className="flex items-center gap-2.5">
+                  <Users className="w-4 h-4" style={{ color: '#059669' }} strokeWidth={1.5} />
+                  <h3 className="text-[14px] font-semibold" style={{ color: '#1e293b' }}>ביצועי צוות</h3>
+                </div>
+                <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.team ? 'rotate-180' : ''}`} style={{ color: '#94a3b8' }} />
+              </button>
+              {!expandedSections.team && (
+                <div className="px-5 pb-4">
+                  <span className="text-[28px] font-bold" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{teamMembers.length}</span>
+                  <p className="text-[12px] mt-0.5" style={{ color: '#94a3b8' }}>נציגים פעילים</p>
+                </div>
+              )}
+              {expandedSections.team && (
+                <div style={{ borderTop: '1px solid #f1f5f9' }}>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-right border-collapse">
+                      <thead>
+                        <tr style={{ background: '#f8fafc' }}>
+                          <th className="py-2 px-3 text-[11px] font-medium uppercase" style={{ color: '#64748b', letterSpacing: '0.05em' }}>נציג</th>
+                          <th className="py-2 px-2 text-[11px] font-medium uppercase text-center" style={{ color: '#64748b', letterSpacing: '0.05em' }}>שיחות</th>
+                          <th className="py-2 px-3 text-[11px] font-medium uppercase text-left" style={{ color: '#64748b', letterSpacing: '0.05em' }}>הכנסות</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {teamPerformance.length === 0 ? (
+                          <tr><td colSpan={3} className="text-center py-8 text-[13px]" style={{ color: '#94a3b8' }}>אין נתוני ביצועים</td></tr>
+                        ) : (
+                          teamPerformance.slice(0, 5).map((member) => (
+                            <tr key={member.id} className="hover:bg-[#fafbfc] transition-colors" style={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <td className="py-2.5 px-3">
+                                <div className="flex items-center gap-2">
+                                  <img
+                                    src={sanitizeUrl(member.avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}&background=random&size=24`}
+                                    alt=""
+                                    className="w-6 h-6 rounded-full"
+                                  />
+                                  <span className="text-[13px] font-medium truncate max-w-[80px]" style={{ color: '#334155' }}>{member.name}</span>
+                                </div>
+                              </td>
+                              <td className="py-2.5 px-2 text-center text-[13px] font-semibold" style={{ color: '#334155', fontVariantNumeric: 'tabular-nums' }}>{member.calls || 0}</td>
+                              <td className="py-2.5 px-3 text-left text-[13px] font-semibold ltr" style={{ color: '#059669', fontVariantNumeric: 'tabular-nums' }}>₪{(member.revenue || 0).toLocaleString()}</td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Column 3: Attention Queue */}
+          {!hiddenWidgets.includes('attention-queue') && (
+            <NeedsAttentionCard orgId={orgId} />
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Target, TrendingUp, Award } from 'lucide-react';
+import { Target, TrendingUp, Award, CheckCircle2 } from 'lucide-react';
 
 interface GoalProgressProps {
   teamProgress: {
@@ -12,111 +12,91 @@ interface GoalProgressProps {
 
 export const GoalProgressCard: React.FC<GoalProgressProps> = ({ teamProgress, loading }) => {
   const goals = [
-    { 
-      label: 'שיחות', 
-      current: teamProgress.calls.current, 
+    {
+      label: 'שיחות',
+      current: teamProgress.calls.current,
       target: teamProgress.calls.target,
       percentage: teamProgress.calls.percentage,
       icon: Target,
-      color: 'purple'
+      barColor: '#6366f1'
     },
-    { 
-      label: 'פגישות', 
-      current: teamProgress.meetings.current, 
+    {
+      label: 'פגישות',
+      current: teamProgress.meetings.current,
       target: teamProgress.meetings.target,
       percentage: teamProgress.meetings.percentage,
       icon: TrendingUp,
-      color: 'emerald'
+      barColor: '#2563eb'
     },
-    { 
-      label: 'עסקאות', 
-      current: teamProgress.deals.current, 
+    {
+      label: 'עסקאות',
+      current: teamProgress.deals.current,
       target: teamProgress.deals.target,
       percentage: teamProgress.deals.percentage,
       icon: Award,
-      color: 'amber'
+      barColor: '#059669'
     }
   ];
 
-  const getColorClasses = (color: string) => {
-    const colors: any = {
-      purple: { bg: 'bg-purple-500', text: 'text-purple-600 dark:text-purple-400' },
-      emerald: { bg: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400' },
-      amber: { bg: 'bg-amber-500', text: 'text-amber-600 dark:text-amber-400' }
-    };
-    return colors[color] || colors.purple;
-  };
-
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-6 hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
+    <div className="bg-white rounded-lg overflow-hidden h-full" style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 flex items-center justify-center">
-            <Target className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-          </div>
-          <div>
-            <h3 className="font-bold text-slate-900 dark:text-white text-base">יעדים היום</h3>
-            <p className="text-xs text-slate-500 dark:text-slate-400">צוות מלא</p>
-          </div>
+      <div className="px-5 py-4" style={{ borderBottom: '1px solid #f1f5f9' }}>
+        <div className="flex items-center gap-2.5">
+          <Target className="w-4 h-4" style={{ color: '#6366f1' }} strokeWidth={1.5} />
+          <h3 className="text-[14px] font-semibold" style={{ color: '#1e293b' }}>יעדים היום</h3>
         </div>
       </div>
 
-        {/* Goals List */}
-        <div className="space-y-5">
-          {loading ? (
-            <div className="text-center py-6 text-slate-400 text-sm">טוען...</div>
-          ) : (
-            goals.map((goal, index) => {
-              const Icon = goal.icon;
-              const colors = getColorClasses(goal.color);
-              const remaining = goal.target - goal.current;
-              const isComplete = goal.percentage >= 100;
-              
-              return (
-                <div key={index}>
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className={`w-8 h-8 rounded-lg ${colors.bg} flex items-center justify-center`}>
-                        <Icon className="w-4 h-4 text-white" />
-                      </div>
-                      <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{goal.label}</span>
-                    </div>
-                    <div className="text-left">
-                      <span className="text-base font-bold text-slate-900 dark:text-white">{goal.current}</span>
-                      <span className="text-xs text-slate-500 dark:text-slate-400">/{goal.target}</span>
-                    </div>
-                  </div>
-                  
-                  {/* Progress Bar */}
-                  <div className="relative h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div 
-                      className={`absolute top-0 right-0 h-full rounded-full transition-all duration-500 ${
-                        isComplete ? 'bg-emerald-500' : colors.bg
-                      }`}
-                      style={{ width: `${Math.min(100, goal.percentage)}%` }}
-                    />
-                  </div>
-                  
-                  <div className="flex items-center justify-between mt-1.5">
-                    <span className="text-xs text-slate-500 dark:text-slate-400">
-                      {isComplete ? (
-                        <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                          <Award className="w-3 h-3" /> הושלם
-                        </span>
-                      ) : (
-                        `עוד ${remaining}`
-                      )}
-                    </span>
-                    <span className={`text-xs font-semibold ${isComplete ? 'text-emerald-600 dark:text-emerald-400' : colors.text}`}>
-                      {goal.percentage}%
-                    </span>
+      {/* Goals */}
+      <div className="px-5 py-4 space-y-5">
+        {loading ? (
+          <div className="flex items-center justify-center py-6 gap-2">
+            <div className="w-4 h-4 rounded-full animate-spin" style={{ border: '2px solid #e5e7eb', borderTopColor: '#6366f1' }} />
+            <span className="text-[13px]" style={{ color: '#94a3b8' }}>טוען...</span>
+          </div>
+        ) : (
+          goals.map((goal, index) => {
+            const isComplete = goal.percentage >= 100;
+            const barColor = isComplete ? '#059669' : goal.barColor;
+
+            return (
+              <div key={index}>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[13px] font-medium" style={{ color: '#475569' }}>{goal.label}</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-[15px] font-bold" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>{goal.current}</span>
+                    <span className="text-[11px]" style={{ color: '#94a3b8' }}>/ {goal.target}</span>
                   </div>
                 </div>
-              );
-            })
-          )}
-        </div>
+
+                {/* Progress Bar */}
+                <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#e5e7eb' }}>
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{ width: `${Math.min(100, goal.percentage)}%`, backgroundColor: barColor }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between mt-1.5">
+                  <span className="text-[11px]" style={{ color: '#94a3b8' }}>
+                    {isComplete ? (
+                      <span className="flex items-center gap-1" style={{ color: '#059669' }}>
+                        <CheckCircle2 className="w-3 h-3" /> הושלם
+                      </span>
+                    ) : (
+                      `עוד ${goal.target - goal.current}`
+                    )}
+                  </span>
+                  <span className="text-[11px] font-semibold" style={{ color: barColor, fontVariantNumeric: 'tabular-nums' }}>
+                    {goal.percentage}%
+                  </span>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
     </div>
   );
 };
