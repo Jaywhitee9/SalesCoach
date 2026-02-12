@@ -208,7 +208,10 @@ const ManagerDashboardInner: React.FC<ManagerDashboardProps> = ({ isDarkMode, or
         }
         if (teamPerfRes && 'json' in teamPerfRes) {
           const d = await (teamPerfRes as Response).json();
-          if (d.success) setTeamPerformance(d.performance || []);
+          if (d.success) {
+            const perf = Array.isArray(d.performance) ? d.performance : (d.performance?.performance || []);
+            setTeamPerformance(perf);
+          }
         }
 
       } catch (err) {
@@ -361,29 +364,29 @@ const ManagerDashboardInner: React.FC<ManagerDashboardProps> = ({ isDarkMode, or
       {!hiddenWidgets.includes('kpis') && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
           {kpis.map((kpi, index) => {
-              const Icon = kpi.icon || TrendingUp;
-              const iconColors = [
-                'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400',
-                'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400',
-                'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400',
-                'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400'
-              ];
-              return (
-                <div key={index} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
-                  <div className="flex items-center justify-between mb-4">
-                    <span className="text-sm font-medium text-slate-600 dark:text-slate-400">{kpi.label}</span>
-                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${iconColors[index] || iconColors[0]}`}>
-                      <Icon className="w-5 h-5" />
-                    </div>
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{kpi.value}</span>
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{kpi.subtext}</span>
+            const Icon = kpi.icon || TrendingUp;
+            const iconColors = [
+              'bg-indigo-50 dark:bg-indigo-950/30 text-indigo-600 dark:text-indigo-400',
+              'bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400',
+              'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400',
+              'bg-rose-50 dark:bg-rose-950/30 text-rose-600 dark:text-rose-400'
+            ];
+            return (
+              <div key={index} className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-5 hover:border-slate-300 dark:hover:border-slate-700 transition-colors">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="text-sm font-medium text-slate-600 dark:text-slate-400">{kpi.label}</span>
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${iconColors[index] || iconColors[0]}`}>
+                    <Icon className="w-5 h-5" />
                   </div>
                 </div>
-              );
-            })}
-          </div>
+                <div className="flex flex-col">
+                  <span className="text-3xl font-bold text-slate-900 dark:text-white mb-1">{kpi.value}</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">{kpi.subtext}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {/* 2. Middle Row: 3 columns - Live Activity | Goals | Recommendations */}
@@ -403,98 +406,98 @@ const ManagerDashboardInner: React.FC<ManagerDashboardProps> = ({ isDarkMode, or
         {/* Pipeline & Revenue */}
         {!hiddenWidgets.includes('pipeline') && (
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-              <button onClick={() => toggleSection('pipeline')} className="w-full px-5 py-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 flex items-center justify-center">
-                    <BarChart3 className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-                  </div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-sm">פייפליין והכנסות</h3>
-                  <span className="text-xs font-medium bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full">החודש</span>
+            <button onClick={() => toggleSection('pipeline')} className="w-full px-5 py-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-950/30 flex items-center justify-center">
+                  <BarChart3 className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
                 </div>
-                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${expandedSections.pipeline ? 'rotate-180' : ''}`} />
-              </button>
-              {!expandedSections.pipeline && (
-                <div className="px-5 pb-4">
-                  <span className="text-2xl font-bold text-slate-900 dark:text-white ltr">₪{funnelData.reduce((s, f) => s + (f.value || 0), 0).toLocaleString()}</span>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">סה"כ בפייפליין</p>
-                </div>
-              )}
-              {expandedSections.pipeline && (
-                <div className="px-5 pb-5 space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4">
-                  {funnelData.length === 0 ? (
-                    <p className="text-sm text-slate-400 text-center py-3">אין נתוני פייפליין</p>
-                  ) : (
-                    funnelData.map((stage, index) => (
-                      <div key={index} className="flex items-center gap-3">
-                        <span className="w-20 text-xs font-medium text-slate-600 dark:text-slate-400 truncate text-right shrink-0">{stage.name}</span>
-                        <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${(stage.value / maxPipelineValue) * 100}%`, ...getBarStyles(index) }} />
-                        </div>
-                        <span className="text-xs font-bold text-slate-700 dark:text-slate-300 w-16 text-left shrink-0 ltr tabular-nums">₪{(stage.value / 1000).toLocaleString()}k</span>
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm">פייפליין והכנסות</h3>
+                <span className="text-xs font-medium bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 px-2 py-0.5 rounded-full">החודש</span>
+              </div>
+              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${expandedSections.pipeline ? 'rotate-180' : ''}`} />
+            </button>
+            {!expandedSections.pipeline && (
+              <div className="px-5 pb-4">
+                <span className="text-2xl font-bold text-slate-900 dark:text-white ltr">₪{funnelData.reduce((s, f) => s + (f.value || 0), 0).toLocaleString()}</span>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">סה"כ בפייפליין</p>
+              </div>
+            )}
+            {expandedSections.pipeline && (
+              <div className="px-5 pb-5 space-y-3 border-t border-slate-100 dark:border-slate-800 pt-4">
+                {funnelData.length === 0 ? (
+                  <p className="text-sm text-slate-400 text-center py-3">אין נתוני פייפליין</p>
+                ) : (
+                  funnelData.map((stage, index) => (
+                    <div key={index} className="flex items-center gap-3">
+                      <span className="w-20 text-xs font-medium text-slate-600 dark:text-slate-400 truncate text-right shrink-0">{stage.name}</span>
+                      <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${(stage.value / maxPipelineValue) * 100}%`, ...getBarStyles(index) }} />
                       </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
+                      <span className="text-xs font-bold text-slate-700 dark:text-slate-300 w-16 text-left shrink-0 ltr tabular-nums">₪{(stage.value / 1000).toLocaleString()}k</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {/* Team Performance */}
         {!hiddenWidgets.includes('team-performance') && (
           <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
-              <button onClick={() => toggleSection('team')} className="w-full px-5 py-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center">
-                    <Users className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <h3 className="font-bold text-slate-900 dark:text-white text-sm">ביצועי צוות</h3>
+            <button onClick={() => toggleSection('team')} className="w-full px-5 py-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 flex items-center justify-center">
+                  <Users className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                 </div>
-                <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${expandedSections.team ? 'rotate-180' : ''}`} />
-              </button>
-              {!expandedSections.team && (
-                <div className="px-5 pb-4">
-                  <span className="text-2xl font-bold text-slate-900 dark:text-white">{teamMembers.length}</span>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">נציגים פעילים</p>
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm">ביצועי צוות</h3>
+              </div>
+              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${expandedSections.team ? 'rotate-180' : ''}`} />
+            </button>
+            {!expandedSections.team && (
+              <div className="px-5 pb-4">
+                <span className="text-2xl font-bold text-slate-900 dark:text-white">{teamMembers.length}</span>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">נציגים פעילים</p>
+              </div>
+            )}
+            {expandedSections.team && (
+              <div className="border-t border-slate-100 dark:border-slate-800">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-right border-collapse">
+                    <thead className="text-[11px] text-slate-500 bg-slate-50/80 dark:bg-slate-800/50">
+                      <tr>
+                        <th className="py-2.5 px-3 font-medium">נציג</th>
+                        <th className="py-2.5 px-2 font-medium text-center">שיחות</th>
+                        <th className="py-2.5 px-3 font-medium text-left">הכנסות</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-sm">
+                      {teamPerformance.length === 0 ? (
+                        <tr><td colSpan={3} className="text-center py-6 text-slate-400 text-xs">אין נתוני ביצועים זמינים</td></tr>
+                      ) : (
+                        teamPerformance.slice(0, 5).map((member) => (
+                          <tr key={member.id} className="border-b border-slate-50 dark:border-slate-800/50 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                            <td className="py-2.5 px-3">
+                              <div className="flex items-center gap-2">
+                                <img
+                                  src={sanitizeUrl(member.avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}&background=random&size=32`}
+                                  alt=""
+                                  className="w-6 h-6 rounded-full"
+                                />
+                                <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate max-w-[80px]">{member.name}</span>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-2 text-center text-xs font-bold text-slate-700 dark:text-slate-300">{member.calls || 0}</td>
+                            <td className="py-2.5 px-3 text-left text-xs font-bold text-emerald-600 dark:text-emerald-400 ltr">₪{(member.revenue || 0).toLocaleString()}</td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
                 </div>
-              )}
-              {expandedSections.team && (
-                <div className="border-t border-slate-100 dark:border-slate-800">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-right border-collapse">
-                      <thead className="text-[11px] text-slate-500 bg-slate-50/80 dark:bg-slate-800/50">
-                        <tr>
-                          <th className="py-2.5 px-3 font-medium">נציג</th>
-                          <th className="py-2.5 px-2 font-medium text-center">שיחות</th>
-                          <th className="py-2.5 px-3 font-medium text-left">הכנסות</th>
-                        </tr>
-                      </thead>
-                      <tbody className="text-sm">
-                        {teamPerformance.length === 0 ? (
-                          <tr><td colSpan={3} className="text-center py-6 text-slate-400 text-xs">אין נתוני ביצועים זמינים</td></tr>
-                        ) : (
-                          teamPerformance.slice(0, 5).map((member) => (
-                            <tr key={member.id} className="border-b border-slate-50 dark:border-slate-800/50 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                              <td className="py-2.5 px-3">
-                                <div className="flex items-center gap-2">
-                                  <img 
-                                    src={sanitizeUrl(member.avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}&background=random&size=32`} 
-                                    alt="" 
-                                    className="w-6 h-6 rounded-full" 
-                                  />
-                                  <span className="text-xs font-medium text-slate-800 dark:text-slate-200 truncate max-w-[80px]">{member.name}</span>
-                                </div>
-                              </td>
-                              <td className="py-2.5 px-2 text-center text-xs font-bold text-slate-700 dark:text-slate-300">{member.calls || 0}</td>
-                              <td className="py-2.5 px-3 text-left text-xs font-bold text-emerald-600 dark:text-emerald-400 ltr">₪{(member.revenue || 0).toLocaleString()}</td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
+              </div>
+            )}
+          </div>
         )}
 
         {/* Attention Queue - Smart Real-Time Monitoring */}

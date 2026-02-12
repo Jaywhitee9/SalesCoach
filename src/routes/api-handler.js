@@ -494,8 +494,8 @@ async function registerApiRoutes(fastify) {
             if (!(await verifyOrgAccess(request, reply, organizationId))) return;
 
             const range = request.query.range || 'month';
-            const performance = await DBService.getTeamPerformance(organizationId, range);
-            return { success: true, performance };
+            const result = await DBService.getTeamPerformance(organizationId, range);
+            return result;
         } catch (err) {
             console.error('[API] Team Performance Error:', err.message);
             return reply.code(500).send({ error: 'Failed' });
