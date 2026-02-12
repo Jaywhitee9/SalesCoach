@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   Phone,
   Calendar,
@@ -52,6 +52,57 @@ const sanitizeUrl = (url: string | null | undefined): string | undefined => {
   return undefined;
 };
 
+// ─── SessionStorage Cache Helpers ───
+const CACHE_KEY = 'dashboard_cache';
+const CACHE_TTL = 60_000; // 1 minute
+
+const getCachedData = (orgId: string) => {
+  try {
+    const raw = sessionStorage.getItem(`${CACHE_KEY}_${orgId}`);
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw);
+    if (Date.now() - ts > CACHE_TTL) return null;
+    return data;
+  } catch { return null; }
+};
+
+const setCachedData = (orgId: string, data: any) => {
+  try {
+    sessionStorage.setItem(`${CACHE_KEY}_${orgId}`, JSON.stringify({ data, ts: Date.now() }));
+  } catch { /* storage full, ignore */ }
+};
+
+// ─── Skeleton Components ───
+const SkeletonPulse: React.FC<{ className?: string; style?: React.CSSProperties }> = ({ className = '', style }) => (
+  <div className={`animate-pulse rounded ${className}`} style={{ background: '#e5e7eb', ...style }} />
+);
+
+const KPISkeleton = () => (
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+    {[0, 1, 2, 3].map(i => (
+      <div key={i} className="bg-white rounded-lg p-5" style={{ border: '1px solid #e5e7eb' }}>
+        <SkeletonPulse className="w-5 h-5 rounded mb-4" />
+        <SkeletonPulse className="w-20 h-12 rounded mb-2" />
+        <SkeletonPulse className="w-24 h-4 rounded" />
+      </div>
+    ))}
+  </div>
+);
+
+const CardSkeleton: React.FC<{ lines?: number }> = ({ lines = 3 }) => (
+  <div className="bg-white rounded-lg overflow-hidden" style={{ border: '1px solid #e5e7eb' }}>
+    <div className="px-5 py-4 flex items-center gap-2.5" style={{ borderBottom: '1px solid #f1f5f9' }}>
+      <SkeletonPulse className="w-4 h-4 rounded" />
+      <SkeletonPulse className="w-28 h-4 rounded" />
+    </div>
+    <div className="p-5 space-y-3">
+      {Array.from({ length: lines }).map((_, i) => (
+        <SkeletonPulse key={i} className="w-full h-4 rounded" style={{ opacity: 1 - i * 0.15 }} />
+      ))}
+    </div>
+  </div>
+);
+
 const ManagerDashboardInner: React.FC<ManagerDashboardProps> = ({ isDarkMode, orgId, onNavigate, userName, centerType = 'sales' }) => {
   const { hiddenWidgets } = useDashboardCustomization();
 
@@ -67,7 +118,6 @@ const ManagerDashboardInner: React.FC<ManagerDashboardProps> = ({ isDarkMode, or
   const [attentionQueue, setAttentionQueue] = useState<any[]>([]);
   const [topDeals, setTopDeals] = useState<any[]>([]);
   const [qualityTrend, setQualityTrend] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const [insights, setInsights] = useState<any[]>([]);
   const [goalProgress, setGoalProgress] = useState<any>(null);
   const [liveActivity, setLiveActivity] = useState<any[]>([]);
@@ -75,6 +125,12 @@ const ManagerDashboardInner: React.FC<ManagerDashboardProps> = ({ isDarkMode, or
     pipeline: false, team: false, attention: false
   });
   const toggleSection = (key: string) => setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
+
+  // ── Progressive loading flags ──
+  const [tier1Loaded, setTier1Loaded] = useState(false); // KPIs + team
+  const [tier2Loaded, setTier2Loaded] = useState(false); // middle section (insights, goals, activity)
+  const [tier3Loaded, setTier3Loaded] = useState(false); // bottom section (funnel, perf, attention, deals)
+  const [initialLoad, setInitialLoad] = useState(true); // first ever load (shows skeleton)
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -111,13 +167,28 @@ const ManagerDashboardInner: React.FC<ManagerDashboardProps> = ({ isDarkMode, or
 
   const maxPipelineValue = Math.max(...(funnelData.length ? funnelData.map(s => s.value) : [0])) * 1.1 || 1000;
 
+  // ─── Progressive Data Fetching ───
   useEffect(() => {
+    if (!orgId) { setInitialLoad(false); return; }
+
+    // Try loading from cache immediately
+    const cached = getCachedData(orgId);
+    if (cached) {
+      if (cached.teamMembers) setTeamMembers(cached.teamMembers);
+      if (cached.kpis) { setKpis(cached.kpis); setTier1Loaded(true); }
+      if (cached.insights) setInsights(cached.insights);
+      if (cached.goalProgress) setGoalProgress(cached.goalProgress);
+      if (cached.liveActivity) setLiveActivity(cached.liveActivity);
+      if (cached.funnelData) setFunnelData(cached.funnelData);
+      if (cached.teamPerformance) setTeamPerformance(cached.teamPerformance);
+      if (cached.attentionQueue) setAttentionQueue(cached.attentionQueue);
+      if (cached.topDeals) setTopDeals(cached.topDeals);
+      setTier2Loaded(true);
+      setTier3Loaded(true);
+      setInitialLoad(false);
+    }
+
     const fetchData = async () => {
-      if (!orgId) { setLoading(false); return; }
-
-      const hasCachedData = kpis.length > 0;
-      if (!hasCachedData) setLoading(true);
-
       try {
         const { data: { session } } = await supabase.auth.getSession();
         const headers = {
@@ -130,94 +201,139 @@ const ManagerDashboardInner: React.FC<ManagerDashboardProps> = ({ isDarkMode, or
         const queryParams = `?range=${rangeParam}&organizationId=${orgId}${userParam}`;
         const days = getDaysForTrend(dateRange);
 
-        const results = await Promise.allSettled([
+        // ── TIER 1: KPIs + Team (fastest, most important) ──
+        const tier1Results = await Promise.allSettled([
           supabase.from('profiles').select('id, full_name, avatar_url, role').eq('organization_id', orgId),
           fetch(`/api/panel/stats${queryParams}`, { headers }),
-          fetch(`/api/pipeline/funnel${queryParams}`, { headers }),
-          fetch(`/api/panel/at-risk-leads?limit=5&organizationId=${orgId}${userParam}`, { headers }),
-          fetch(`/api/panel/top-deals?limit=5&organizationId=${orgId}${userParam}`, { headers }),
-          fetch(`/api/panel/quality-trend?days=${days}&organizationId=${orgId}${userParam}`, { headers }),
-          fetch(`/api/panel/daily-insights?organizationId=${orgId}`, { headers }),
-          fetch(`/api/panel/goal-progress?organizationId=${orgId}`, { headers }),
-          fetch(`/api/panel/live-activity?limit=10&organizationId=${orgId}`, { headers }),
-          fetch(`/api/analytics/team-performance?organizationId=${orgId}&range=${rangeParam}`, { headers })
         ]);
 
-        const responses = results.map(r => r.status === 'fulfilled' ? r.value : null);
-        const [usersResult, statsRes, funnelRes, attentionRes, dealsRes, trendRes, insightsRes, goalRes, activityRes, teamPerfRes] = responses;
+        const [usersResult, statsRes] = tier1Results.map(r => r.status === 'fulfilled' ? r.value : null);
 
+        let newTeamMembers: any[] = [];
         if (usersResult && 'data' in usersResult && usersResult.data) {
-          const mappedUsers = (usersResult.data as any[]).map((u: any) => ({
+          newTeamMembers = (usersResult.data as any[]).map((u: any) => ({
             id: u.id, name: u.full_name, avatar: u.avatar_url, role: u.role
           }));
-          setTeamMembers(mappedUsers);
+          setTeamMembers(newTeamMembers);
         }
 
+        let newKpis: any[] = [];
         if (statsRes && 'json' in statsRes) {
           const d = await (statsRes as Response).json();
           if (d.success) {
             const s = d.stats;
             if (centerType === 'support') {
-              setKpis([
+              newKpis = [
                 { label: 'פניות שטופלו', value: s.leadsContacted?.current || 0, subtext: `יעד: ${s.leadsContacted?.target || 0}`, trend: '+0%', trendDirection: 'neutral', icon: CheckCircle2 },
                 { label: 'ממתינים לנציג', value: s.appointments?.current || 0, subtext: 'זמן אמת', trend: '0', trendDirection: 'neutral', icon: Users },
                 { label: 'עמידה ב-SLA', value: `${s.closedDeals?.percentage || 0}%`, subtext: 'היום', trend: '0%', trendDirection: 'neutral', icon: Award },
                 { label: 'ציון שביעות רצון', value: s.qualityScore || 0, subtext: 'ממוצע', trend: '0', trendDirection: 'neutral', icon: Target },
-              ]);
+              ];
             } else {
-              setKpis([
+              newKpis = [
                 { label: 'סה"כ שיחות', value: s.leadsContacted?.current || 0, subtext: `יעד: ${s.leadsContacted?.target || 0}`, trend: '+0%', trendDirection: 'neutral', icon: Phone },
                 { label: 'פגישות שנקבעו', value: s.appointments?.current || 0, subtext: `יעד: ${s.appointments?.target || 0}`, trend: '+0%', trendDirection: 'neutral', icon: Calendar },
                 { label: 'אחוז סגירה (צוות)', value: `${s.closedDeals?.percentage || 0}%`, subtext: '30 יום אחרונים', trend: '0%', trendDirection: 'neutral', icon: Target },
                 { label: 'איכות שיחה ממוצעת', value: s.qualityScore || 0, subtext: 'ממוצע', trend: '0', trendDirection: 'neutral', icon: Award },
-              ]);
+              ];
             }
+            setKpis(newKpis);
           }
         }
+        setTier1Loaded(true);
+        setInitialLoad(false);
+
+        // ── TIER 2: Middle section (insights, goals, activity) ──
+        const tier2Results = await Promise.allSettled([
+          fetch(`/api/panel/daily-insights?organizationId=${orgId}`, { headers }),
+          fetch(`/api/panel/goal-progress?organizationId=${orgId}`, { headers }),
+          fetch(`/api/panel/live-activity?limit=10&organizationId=${orgId}`, { headers }),
+        ]);
+
+        const [insightsRes, goalRes, activityRes] = tier2Results.map(r => r.status === 'fulfilled' ? r.value : null);
+
+        let newInsights: any[] = [];
+        let newGoalProgress: any = null;
+        let newLiveActivity: any[] = [];
+
+        if (insightsRes && 'json' in insightsRes) {
+          const d = await (insightsRes as Response).json();
+          if (d.success) { newInsights = d.insights || []; setInsights(newInsights); }
+        }
+        if (goalRes && 'json' in goalRes) {
+          const d = await (goalRes as Response).json();
+          if (d.success) { newGoalProgress = d.teamProgress; setGoalProgress(newGoalProgress); }
+        }
+        if (activityRes && 'json' in activityRes) {
+          const d = await (activityRes as Response).json();
+          if (d.success) { newLiveActivity = d.activities || []; setLiveActivity(newLiveActivity); }
+        }
+        setTier2Loaded(true);
+
+        // ── TIER 3: Bottom section (funnel, deals, trend, team perf) ──
+        const tier3Results = await Promise.allSettled([
+          fetch(`/api/pipeline/funnel${queryParams}`, { headers }),
+          fetch(`/api/panel/at-risk-leads?limit=5&organizationId=${orgId}${userParam}`, { headers }),
+          fetch(`/api/panel/top-deals?limit=5&organizationId=${orgId}${userParam}`, { headers }),
+          fetch(`/api/panel/quality-trend?days=${days}&organizationId=${orgId}${userParam}`, { headers }),
+          fetch(`/api/analytics/team-performance?organizationId=${orgId}&range=${rangeParam}`, { headers }),
+        ]);
+
+        const [funnelRes, attentionRes, dealsRes, trendRes, teamPerfRes] = tier3Results.map(r => r.status === 'fulfilled' ? r.value : null);
+
+        let newFunnelData: any[] = [];
+        let newAttentionQueue: any[] = [];
+        let newTopDeals: any[] = [];
+        let newTeamPerformance: any[] = [];
 
         if (funnelRes && 'json' in funnelRes) {
           const d = await (funnelRes as Response).json();
           if (d.success) {
-            setFunnelData((d.funnel || []).map((stage: any) => ({ name: stage.label, value: stage.totalValue || 0, count: stage.count, color: stage.color })));
+            newFunnelData = (d.funnel || []).map((stage: any) => ({ name: stage.label, value: stage.totalValue || 0, count: stage.count, color: stage.color }));
+            setFunnelData(newFunnelData);
           }
         }
-
         if (attentionRes && 'json' in attentionRes) {
           const d = await (attentionRes as Response).json();
-          if (d.success) setAttentionQueue(d.leads || []);
+          if (d.success) { newAttentionQueue = d.leads || []; setAttentionQueue(newAttentionQueue); }
         }
         if (dealsRes && 'json' in dealsRes) {
           const d = await (dealsRes as Response).json();
-          if (d.success) setTopDeals(d.deals || []);
+          if (d.success) { newTopDeals = d.deals || []; setTopDeals(newTopDeals); }
         }
         if (trendRes && 'json' in trendRes) {
           const d = await (trendRes as Response).json();
           if (d.success) setQualityTrend(d.trend || []);
         }
-        if (insightsRes && 'json' in insightsRes) {
-          const d = await (insightsRes as Response).json();
-          if (d.success) setInsights(d.insights || []);
-        }
-        if (goalRes && 'json' in goalRes) {
-          const d = await (goalRes as Response).json();
-          if (d.success) setGoalProgress(d.teamProgress);
-        }
-        if (activityRes && 'json' in activityRes) {
-          const d = await (activityRes as Response).json();
-          if (d.success) setLiveActivity(d.activities || []);
-        }
         if (teamPerfRes && 'json' in teamPerfRes) {
           const d = await (teamPerfRes as Response).json();
           if (d.success) {
             const perf = Array.isArray(d.performance) ? d.performance : (d.performance?.performance || []);
+            newTeamPerformance = perf;
             setTeamPerformance(perf);
           }
         }
+        setTier3Loaded(true);
+
+        // ── Save all data to cache ──
+        setCachedData(orgId!, {
+          teamMembers: newTeamMembers,
+          kpis: newKpis,
+          insights: newInsights,
+          goalProgress: newGoalProgress,
+          liveActivity: newLiveActivity,
+          funnelData: newFunnelData,
+          teamPerformance: newTeamPerformance,
+          attentionQueue: newAttentionQueue,
+          topDeals: newTopDeals,
+        });
 
       } catch (err) {
         console.error('Error fetching dashboard data:', err);
-      } finally {
-        setLoading(false);
+        setInitialLoad(false);
+        setTier1Loaded(true);
+        setTier2Loaded(true);
+        setTier3Loaded(true);
       }
     };
 
@@ -243,15 +359,35 @@ const ManagerDashboardInner: React.FC<ManagerDashboardProps> = ({ isDarkMode, or
     document.body.removeChild(link);
   };
 
-  // ── Loading State ──
-  if (loading && kpis.length === 0) {
+  // ── First-ever load: show skeleton layout ──
+  if (initialLoad && kpis.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center h-full" style={{ background: '#fafbfc' }}>
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center" style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-            <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#2563eb' }} />
+      <div className="flex-1 overflow-y-auto" style={{ background: '#fafbfc' }}>
+        <div className="max-w-[1440px] mx-auto px-6 lg:px-10 py-8">
+          {/* Skeleton header */}
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 gap-4">
+            <div>
+              <SkeletonPulse className="w-48 h-7 rounded mb-2" />
+              <SkeletonPulse className="w-64 h-4 rounded" />
+            </div>
+            <div className="flex items-center gap-2">
+              <SkeletonPulse className="w-[130px] h-9 rounded" />
+              <SkeletonPulse className="w-[130px] h-9 rounded" />
+            </div>
           </div>
-          <span className="text-[13px]" style={{ color: '#94a3b8' }}>טוען נתונים...</span>
+          {/* Skeleton KPIs */}
+          <KPISkeleton />
+          {/* Skeleton middle */}
+          <div className="grid grid-cols-1 lg:grid-cols-10 gap-5 mb-8">
+            <div className="lg:col-span-7"><CardSkeleton lines={4} /></div>
+            <div className="lg:col-span-3"><CardSkeleton lines={3} /></div>
+          </div>
+          {/* Skeleton bottom */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <CardSkeleton lines={3} />
+            <CardSkeleton lines={3} />
+            <CardSkeleton lines={3} />
+          </div>
         </div>
       </div>
     );
@@ -399,151 +535,170 @@ const ManagerDashboardInner: React.FC<ManagerDashboardProps> = ({ isDarkMode, or
 
         {/* ─── KPI CARDS ─── */}
         {!hiddenWidgets.includes('kpis') && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-            {kpis.map((kpi, index) => {
-              const config = kpiIconConfigs[index] || kpiIconConfigs[0];
-              const KpiIcon = kpi.icon || config.icon;
-              return (
-                <div
-                  key={index}
-                  className="bg-white rounded-lg p-5 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition-all duration-200 cursor-default"
-                  style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.03), 0 1px 3px rgba(0,0,0,0.02)' }}
-                >
-                  <div className="flex items-center justify-between mb-4">
-                    <KpiIcon className="w-[18px] h-[18px]" style={{ color: config.color, opacity: 0.6 }} strokeWidth={1.5} />
-                    {hasMeaningfulTrend(kpi.trend) && (
-                      <span className="text-[11px] font-semibold flex items-center gap-0.5" style={{ color: getTrendColor(kpi.trendDirection || 'neutral') }}>
-                        {getTrendIcon(kpi.trendDirection || 'neutral')}
-                        {kpi.trend}
-                      </span>
-                    )}
+          tier1Loaded ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+              {kpis.map((kpi, index) => {
+                const config = kpiIconConfigs[index] || kpiIconConfigs[0];
+                const KpiIcon = kpi.icon || config.icon;
+                return (
+                  <div
+                    key={index}
+                    className="bg-white rounded-lg p-5 hover:shadow-[0_4px_12px_rgba(0,0,0,0.08)] transition-all duration-200 cursor-default"
+                    style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 2px rgba(0,0,0,0.03), 0 1px 3px rgba(0,0,0,0.02)' }}
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <KpiIcon className="w-[18px] h-[18px]" style={{ color: config.color, opacity: 0.6 }} strokeWidth={1.5} />
+                      {hasMeaningfulTrend(kpi.trend) && (
+                        <span className="text-[11px] font-semibold flex items-center gap-0.5" style={{ color: getTrendColor(kpi.trendDirection || 'neutral') }}>
+                          {getTrendIcon(kpi.trendDirection || 'neutral')}
+                          {kpi.trend}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[48px] font-bold leading-none" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}>
+                      {kpi.value}
+                    </div>
+                    <div className="text-[13px] font-medium mt-2" style={{ color: '#64748b' }}>{kpi.label}</div>
                   </div>
-                  <div className="text-[48px] font-bold leading-none" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}>
-                    {kpi.value}
-                  </div>
-                  <div className="text-[13px] font-medium mt-2" style={{ color: '#64748b' }}>{kpi.label}</div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          ) : (
+            <KPISkeleton />
+          )
         )}
 
         {/* ─── MIDDLE SECTION: Insights (70%) + Goals (30%) ─── */}
-        <div className="grid grid-cols-1 lg:grid-cols-10 gap-5 mb-8">
-          <div className="lg:col-span-7 space-y-5">
-            {!hiddenWidgets.includes('ai-insights') && <AIInsightsCard insights={insights} loading={loading} />}
-            {!hiddenWidgets.includes('live-activity') && <LiveActivityCard activities={liveActivity} loading={loading} />}
+        {tier2Loaded ? (
+          <div className="grid grid-cols-1 lg:grid-cols-10 gap-5 mb-8">
+            <div className="lg:col-span-7 space-y-5">
+              {!hiddenWidgets.includes('ai-insights') && <AIInsightsCard insights={insights} loading={false} />}
+              {!hiddenWidgets.includes('live-activity') && <LiveActivityCard activities={liveActivity} loading={false} />}
+            </div>
+            <div className="lg:col-span-3">
+              {!hiddenWidgets.includes('goal-progress') && (
+                <GoalProgressCard
+                  teamProgress={goalProgress || { calls: { current: 0, target: 10, percentage: 0 }, meetings: { current: 0, target: 3, percentage: 0 }, deals: { current: 0, target: 1, percentage: 0 } }}
+                  loading={false}
+                />
+              )}
+            </div>
           </div>
-          <div className="lg:col-span-3">
-            {!hiddenWidgets.includes('goal-progress') && (
-              <GoalProgressCard
-                teamProgress={goalProgress || { calls: { current: 0, target: 10, percentage: 0 }, meetings: { current: 0, target: 3, percentage: 0 }, deals: { current: 0, target: 1, percentage: 0 } }}
-                loading={loading}
-              />
-            )}
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-10 gap-5 mb-8">
+            <div className="lg:col-span-7 space-y-5"><CardSkeleton lines={4} /><CardSkeleton lines={3} /></div>
+            <div className="lg:col-span-3"><CardSkeleton lines={4} /></div>
           </div>
-        </div>
+        )}
 
         {/* ─── BOTTOM SECTION: 3 Columns ─── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {tier3Loaded ? (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-          {/* Column 1: Pipeline & Revenue */}
-          {!hiddenWidgets.includes('pipeline') && (
-            <div className="bg-white rounded-lg overflow-hidden" style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-              <button onClick={() => toggleSection('pipeline')} className="w-full px-5 py-4 flex items-center justify-between hover:bg-[#f8fafc] transition-colors">
-                <div className="flex items-center gap-2.5">
-                  <BarChart3 className="w-4 h-4" style={{ color: '#6366f1' }} strokeWidth={1.5} />
-                  <h3 className="text-[14px] font-semibold" style={{ color: '#1e293b' }}>פייפליין והכנסות</h3>
-                </div>
-                <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.pipeline ? 'rotate-180' : ''}`} style={{ color: '#94a3b8' }} />
-              </button>
-              {!expandedSections.pipeline && (
-                <div className="px-5 pb-4">
-                  <span className="text-[36px] font-bold ltr" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}>₪{funnelData.reduce((s, f) => s + (f.value || 0), 0).toLocaleString()}</span>
-                  <p className="text-[12px] mt-0.5" style={{ color: '#94a3b8' }}>סה"כ בפייפליין</p>
-                </div>
-              )}
-              {expandedSections.pipeline && (
-                <div className="px-5 pb-5 space-y-3 pt-4" style={{ borderTop: '1px solid #f1f5f9' }}>
-                  {funnelData.length === 0 ? (
-                    <p className="text-[13px] text-center py-4" style={{ color: '#94a3b8' }}>אין נתוני פייפליין</p>
-                  ) : (
-                    funnelData.map((stage, index) => (
-                      <div key={index} className="flex items-center gap-3">
-                        <span className="w-16 text-[12px] font-medium truncate text-right shrink-0" style={{ color: '#64748b' }}>{stage.name}</span>
-                        <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: '#e5e7eb' }}>
-                          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${(stage.value / maxPipelineValue) * 100}%`, backgroundColor: '#6366f1', opacity: 0.6 + (index * 0.1) }} />
-                        </div>
-                        <span className="text-[12px] font-semibold w-14 text-left shrink-0 ltr" style={{ color: '#334155', fontVariantNumeric: 'tabular-nums' }}>₪{(stage.value / 1000).toLocaleString()}k</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Column 2: Team Performance */}
-          {!hiddenWidgets.includes('team-performance') && (
-            <div className="bg-white rounded-lg overflow-hidden" style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-              <button onClick={() => toggleSection('team')} className="w-full px-5 py-4 flex items-center justify-between hover:bg-[#f8fafc] transition-colors">
-                <div className="flex items-center gap-2.5">
-                  <Users className="w-4 h-4" style={{ color: '#059669' }} strokeWidth={1.5} />
-                  <h3 className="text-[14px] font-semibold" style={{ color: '#1e293b' }}>ביצועי צוות</h3>
-                </div>
-                <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.team ? 'rotate-180' : ''}`} style={{ color: '#94a3b8' }} />
-              </button>
-              {!expandedSections.team && (
-                <div className="px-5 pb-4">
-                  <span className="text-[36px] font-bold" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}>{teamMembers.length}</span>
-                  <p className="text-[12px] mt-0.5" style={{ color: '#94a3b8' }}>נציגים פעילים</p>
-                </div>
-              )}
-              {expandedSections.team && (
-                <div style={{ borderTop: '1px solid #f1f5f9' }}>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-right border-collapse">
-                      <thead>
-                        <tr style={{ background: '#f8fafc' }}>
-                          <th className="py-2 px-3 text-[11px] font-medium uppercase" style={{ color: '#64748b', letterSpacing: '0.05em' }}>נציג</th>
-                          <th className="py-2 px-2 text-[11px] font-medium uppercase text-center" style={{ color: '#64748b', letterSpacing: '0.05em' }}>שיחות</th>
-                          <th className="py-2 px-3 text-[11px] font-medium uppercase text-left" style={{ color: '#64748b', letterSpacing: '0.05em' }}>הכנסות</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {teamPerformance.length === 0 ? (
-                          <tr><td colSpan={3} className="text-center py-8 text-[13px]" style={{ color: '#94a3b8' }}>אין נתוני ביצועים</td></tr>
-                        ) : (
-                          teamPerformance.slice(0, 5).map((member) => (
-                            <tr key={member.id} className="hover:bg-[#fafbfc] transition-colors" style={{ borderBottom: '1px solid #f1f5f9' }}>
-                              <td className="py-2.5 px-3">
-                                <div className="flex items-center gap-2">
-                                  <img
-                                    src={sanitizeUrl(member.avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}&background=random&size=24`}
-                                    alt=""
-                                    className="w-6 h-6 rounded-full"
-                                  />
-                                  <span className="text-[13px] font-medium truncate max-w-[80px]" style={{ color: '#334155' }}>{member.name}</span>
-                                </div>
-                              </td>
-                              <td className="py-2.5 px-2 text-center text-[13px] font-semibold" style={{ color: '#334155', fontVariantNumeric: 'tabular-nums' }}>{member.calls || 0}</td>
-                              <td className="py-2.5 px-3 text-left text-[13px] font-semibold ltr" style={{ color: '#059669', fontVariantNumeric: 'tabular-nums' }}>₪{(member.revenue || 0).toLocaleString()}</td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
+            {/* Column 1: Pipeline & Revenue */}
+            {!hiddenWidgets.includes('pipeline') && (
+              <div className="bg-white rounded-lg overflow-hidden" style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                <button onClick={() => toggleSection('pipeline')} className="w-full px-5 py-4 flex items-center justify-between hover:bg-[#f8fafc] transition-colors">
+                  <div className="flex items-center gap-2.5">
+                    <BarChart3 className="w-4 h-4" style={{ color: '#6366f1' }} strokeWidth={1.5} />
+                    <h3 className="text-[14px] font-semibold" style={{ color: '#1e293b' }}>פייפליין והכנסות</h3>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                  <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.pipeline ? 'rotate-180' : ''}`} style={{ color: '#94a3b8' }} />
+                </button>
+                {!expandedSections.pipeline && (
+                  <div className="px-5 pb-4">
+                    <span className="text-[36px] font-bold ltr" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}>₪{funnelData.reduce((s, f) => s + (f.value || 0), 0).toLocaleString()}</span>
+                    <p className="text-[12px] mt-0.5" style={{ color: '#94a3b8' }}>סה"כ בפייפליין</p>
+                  </div>
+                )}
+                {expandedSections.pipeline && (
+                  <div className="px-5 pb-5 space-y-3 pt-4" style={{ borderTop: '1px solid #f1f5f9' }}>
+                    {funnelData.length === 0 ? (
+                      <p className="text-[13px] text-center py-4" style={{ color: '#94a3b8' }}>אין נתוני פייפליין</p>
+                    ) : (
+                      funnelData.map((stage, index) => (
+                        <div key={index} className="flex items-center gap-3">
+                          <span className="w-16 text-[12px] font-medium truncate text-right shrink-0" style={{ color: '#64748b' }}>{stage.name}</span>
+                          <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: '#e5e7eb' }}>
+                            <div className="h-full rounded-full transition-all duration-700" style={{ width: `${(stage.value / maxPipelineValue) * 100}%`, backgroundColor: '#6366f1', opacity: 0.6 + (index * 0.1) }} />
+                          </div>
+                          <span className="text-[12px] font-semibold w-14 text-left shrink-0 ltr" style={{ color: '#334155', fontVariantNumeric: 'tabular-nums' }}>₪{(stage.value / 1000).toLocaleString()}k</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
 
-          {/* Column 3: Attention Queue */}
-          {!hiddenWidgets.includes('attention-queue') && (
-            <NeedsAttentionCard orgId={orgId} />
-          )}
-        </div>
+            {/* Column 2: Team Performance */}
+            {!hiddenWidgets.includes('team-performance') && (
+              <div className="bg-white rounded-lg overflow-hidden" style={{ border: '1px solid #e5e7eb', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                <button onClick={() => toggleSection('team')} className="w-full px-5 py-4 flex items-center justify-between hover:bg-[#f8fafc] transition-colors">
+                  <div className="flex items-center gap-2.5">
+                    <Users className="w-4 h-4" style={{ color: '#059669' }} strokeWidth={1.5} />
+                    <h3 className="text-[14px] font-semibold" style={{ color: '#1e293b' }}>ביצועי צוות</h3>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 transition-transform ${expandedSections.team ? 'rotate-180' : ''}`} style={{ color: '#94a3b8' }} />
+                </button>
+                {!expandedSections.team && (
+                  <div className="px-5 pb-4">
+                    <span className="text-[36px] font-bold" style={{ color: '#0f172a', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }}>{teamMembers.length}</span>
+                    <p className="text-[12px] mt-0.5" style={{ color: '#94a3b8' }}>נציגים פעילים</p>
+                  </div>
+                )}
+                {expandedSections.team && (
+                  <div style={{ borderTop: '1px solid #f1f5f9' }}>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-right border-collapse">
+                        <thead>
+                          <tr style={{ background: '#f8fafc' }}>
+                            <th className="py-2 px-3 text-[11px] font-medium uppercase" style={{ color: '#64748b', letterSpacing: '0.05em' }}>נציג</th>
+                            <th className="py-2 px-2 text-[11px] font-medium uppercase text-center" style={{ color: '#64748b', letterSpacing: '0.05em' }}>שיחות</th>
+                            <th className="py-2 px-3 text-[11px] font-medium uppercase text-left" style={{ color: '#64748b', letterSpacing: '0.05em' }}>הכנסות</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {teamPerformance.length === 0 ? (
+                            <tr><td colSpan={3} className="text-center py-8 text-[13px]" style={{ color: '#94a3b8' }}>אין נתוני ביצועים</td></tr>
+                          ) : (
+                            teamPerformance.slice(0, 5).map((member) => (
+                              <tr key={member.id} className="hover:bg-[#fafbfc] transition-colors" style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                <td className="py-2.5 px-3">
+                                  <div className="flex items-center gap-2">
+                                    <img
+                                      src={sanitizeUrl(member.avatar) || `https://ui-avatars.com/api/?name=${encodeURIComponent(member.name)}&background=random&size=24`}
+                                      alt=""
+                                      className="w-6 h-6 rounded-full"
+                                    />
+                                    <span className="text-[13px] font-medium truncate max-w-[80px]" style={{ color: '#334155' }}>{member.name}</span>
+                                  </div>
+                                </td>
+                                <td className="py-2.5 px-2 text-center text-[13px] font-semibold" style={{ color: '#334155', fontVariantNumeric: 'tabular-nums' }}>{member.calls || 0}</td>
+                                <td className="py-2.5 px-3 text-left text-[13px] font-semibold ltr" style={{ color: '#059669', fontVariantNumeric: 'tabular-nums' }}>₪{(member.revenue || 0).toLocaleString()}</td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Column 3: Attention Queue */}
+            {!hiddenWidgets.includes('attention-queue') && (
+              <NeedsAttentionCard orgId={orgId} />
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            <CardSkeleton lines={3} />
+            <CardSkeleton lines={3} />
+            <CardSkeleton lines={3} />
+          </div>
+        )}
       </div>
     </div>
   );
