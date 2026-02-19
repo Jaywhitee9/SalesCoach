@@ -147,88 +147,11 @@ async function registerApiRoutes(fastify) {
             return { success: true, lead };
         } catch (err) {
             console.error('[Webhook] Lead creation error:', err.message);
-            return reply.code(500).send({ success: false, error: 'Failed to create lead: ' + err.message });
+            return reply.code(500).send({ success: false, error: 'Failed to create lead' });
         }
     });
 
-    // --- DEBUG ENDPOINT (Temporary) ---
-    fastify.get('/api/debug/check-key', async (request, reply) => {
-        const apiKey = request.query.apiKey;
-        if (!apiKey) return { error: 'Missing apiKey param' };
-
-        const crypto = require('crypto');
-        const keyHash = crypto.createHash('sha256').update(apiKey.trim()).digest('hex');
-
-        // Manual lookup to debug
-        const { createClient } = require('@supabase/supabase-js');
-        const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-        const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-        const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-        const { data, error } = await supabase
-            .from('api_keys')
-            .select('*')
-            .eq('key_hash', keyHash);
-
-        // Check leads table structure
-        const { data: leadSample, error: leadError } = await supabase
-            .from('leads')
-            .select('*')
-            .limit(1);
-
-        // Try to Insert a Dummy Lead to check for Constraint/Column errors
-        let insertTest = { success: false, error: null };
-        try {
-            // Use random phone to avoid unique constraints
-            const randomPhone = '050' + Math.floor(Math.random() * 10000000);
-
-            const { data: insertedLead, error: insertError } = await supabase
-                .from('leads')
-                .insert({
-                    organization_id: data[0].organization_id,
-                    org_id: data[0].organization_id, // MATCHING THE FIX: Sending org_id
-                    name: 'Debug Probe',
-                    phone: randomPhone,
-                    email: 'debug@probe.com',
-                    source: 'Debug Explorer',
-                    tags: ['Debug'],
-                    status: 'New'
-                })
-                .select()
-                .single();
-
-            if (insertError) {
-                insertTest.error = insertError;
-            } else {
-                insertTest.success = true;
-                insertTest.leadId = insertedLead.id;
-                // Cleanup
-                await supabase.from('leads').delete().eq('id', insertedLead.id);
-            }
-        } catch (err) {
-            insertTest.error = err.message;
-        }
-
-        // Get schema of leads table
-        const { data: schemaData, error: schemaError } = await supabase
-            .rpc('get_leads_columns');
-
-        return {
-            providedKey: apiKey,
-            computedHash: keyHash,
-            dbResult: data,
-            insertTestResult: insertTest,
-            leadsTableCheck: {
-                sample: leadSample ? leadSample[0] : null,
-                error: leadError
-            },
-            schemaInfo: schemaData || schemaError,
-            envCheck: {
-                hasServiceKey: !!supabaseServiceKey,
-                url: supabaseUrl
-            }
-        };
-    });
+    // Debug endpoint removed — was exposing internal schema and data
 
     // --- CALLS (Existing functionality via API) ---
     fastify.get('/api/calls/recent', async (request, reply) => {
@@ -397,28 +320,17 @@ async function registerApiRoutes(fastify) {
         // CHECK BOTH PROFILE AND METADATA
         const userRole = profile?.role || user?.user_metadata?.role || user?.app_metadata?.role;
 
-        console.log('[Auth Debug] ----------------------------------------------------------------');
-        console.log('[Auth Debug] User:', user.email, 'ID:', user.id);
-        console.log('[Auth Debug] Profile Role:', profile?.role, 'Metadata Role:', user?.user_metadata?.role || user?.app_metadata?.role);
-        console.log('[Auth Debug] RESOLVED ROLE:', userRole);
-        console.log('[Auth Debug] Target Org:', targetOrgId, 'Profile Org:', profile?.organization_id);
-        console.log('[Auth Debug] Full Metadata:', JSON.stringify(user?.user_metadata));
-        console.log('[Auth Debug] ----------------------------------------------------------------');
+        // Auth context logged at debug level only
+        if (process.env.NODE_ENV !== 'production') {
+            console.log('[Auth] User:', user.email, 'Role:', userRole, 'Org:', profile?.organization_id);
+        }
 
         if (['super_admin', 'platform_admin'].includes(userRole)) return true; // Super Admin can access all
 
         if (targetOrgId !== 'current' && profile?.organization_id !== targetOrgId) {
-            console.log('[Auth Debug] Mismatch! Forbidden.');
+            console.warn('[Auth] Org mismatch — access denied');
             reply.code(403).send({
-                error: 'Forbidden: Organization Mismatch',
-                debug: {
-                    user_id: user.id,
-                    role_from_profile: profile?.role,
-                    role_from_meta: user?.user_metadata?.role,
-                    resolved_role: userRole,
-                    user_org: profile?.organization_id,
-                    target_org: targetOrgId
-                }
+                error: 'Forbidden: Organization Mismatch'
             });
             return false;
         }
@@ -1091,7 +1003,7 @@ async function registerApiRoutes(fastify) {
             };
         } catch (err) {
             console.error('[API] Record Attempt Error:', err.message);
-            return reply.code(500).send({ success: false, error: 'Failed to record attempt: ' + err.message });
+            return reply.code(500).send({ success: false, error: 'Failed to record attempt' });
         }
     });
 
