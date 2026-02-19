@@ -2,8 +2,21 @@ const DBService = require('../services/db-service');
 const CoachingEngine = require('../services/coaching-engine');
 
 /**
- * Registers generic API routes
- * @param {import('fastify').FastifyInstance} fastify 
+ * @typedef {import('../../types').ApiResponse} ApiResponse
+ * @typedef {import('../../types').Lead} Lead
+ * @typedef {import('../../types').Call} Call
+ * @typedef {import('../../types').CreateLeadRequest} CreateLeadRequest
+ * @typedef {import('../../types').LeadWebhookRequest} LeadWebhookRequest
+ * @typedef {import('../../types').StatsResponse} StatsResponse
+ * @typedef {import('../../types').PerformanceMetricsResponse} PerformanceMetricsResponse
+ * @typedef {import('../../types').DashboardQueryParams} DashboardQueryParams
+ */
+
+/**
+ * Registers generic API routes for the Sales Coach application
+ * Handles leads, calls, stats, campaigns, settings, and analytics
+ * @param {import('fastify').FastifyInstance} fastify - Fastify instance
+ * @returns {Promise<void>}
  */
 async function registerApiRoutes(fastify) {
 
@@ -103,7 +116,32 @@ async function registerApiRoutes(fastify) {
     // --- LEAD WEBHOOK (SECURE: Requires API Key) ---
     // External services (Facebook, Landing Pages, Zapier) call this to add leads
     // Header: X-API-Key: org_sk_xxxxx  OR  Query: ?apiKey=org_sk_xxxxx
-    fastify.post('/api/leads/webhook', async (request, reply) => {
+    fastify.post('/api/leads/webhook', {
+        schema: {
+            body: {
+                type: 'object',
+                required: ['name', 'phone'],
+                properties: {
+                    name: { type: 'string', minLength: 1, maxLength: 255 },
+                    phone: { type: 'string', minLength: 8, maxLength: 20, pattern: '^[0-9+\\-\\s()]+$' },
+                    email: { type: 'string', format: 'email', maxLength: 255 },
+                    company: { type: 'string', maxLength: 255 },
+                    source: { type: 'string', maxLength: 100 },
+                    status: { type: 'string', enum: ['New', 'Contacted', 'Qualified', 'Proposal', 'Negotiation', 'Won', 'Lost'] },
+                    priority: { type: 'string', enum: ['Hot', 'Warm', 'Cold'] },
+                    value: { type: 'number', minimum: 0, maximum: 99999999 },
+                    notes: { type: 'string', maxLength: 5000 },
+                    tags: { type: 'array', items: { type: 'string', maxLength: 50 }, maxItems: 20 }
+                }
+            }
+        },
+        config: {
+            rateLimit: {
+                max: 30,
+                timeWindow: '1 minute'
+            }
+        }
+    }, async (request, reply) => {
         try {
             // Get API key from header or query
             const apiKey = request.headers['x-api-key'] || request.query.apiKey;
@@ -372,6 +410,14 @@ async function registerApiRoutes(fastify) {
     });
 
     // --- HELPER: Verify Organization Access ---
+
+    /**
+     * Verify that the authenticated user has access to the target organization
+     * @param {import('fastify').FastifyRequest} request - Fastify request object
+     * @param {import('fastify').FastifyReply} reply - Fastify reply object
+     * @param {string} targetOrgId - Target organization ID to verify access to
+     * @returns {Promise<boolean>} True if access is granted, false otherwise
+     */
     async function verifyOrgAccess(request, reply, targetOrgId) {
         if (!targetOrgId) return true; // No org filter, allow (logic might fallback to user ownership)
 
@@ -432,6 +478,12 @@ async function registerApiRoutes(fastify) {
         return true;
     }
 
+    /**
+     * Get authenticated user and profile from request
+     * @param {import('fastify').FastifyRequest} request - Fastify request object
+     * @param {import('fastify').FastifyReply} reply - Fastify reply object
+     * @returns {Promise<{user: any, profile: any}|null>} User and profile object, or null if unauthorized
+     */
     async function getAuthUser(request, reply) {
         const authHeader = request.headers.authorization;
         if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -687,6 +739,29 @@ async function registerApiRoutes(fastify) {
         }
     });
 
+    fastify.get('/api/targets/progress', async (request, reply) => {
+        try {
+            const organizationId = request.user?.profile?.organization_id || request.query.organizationId;
+            if (!organizationId) {
+                // Try to get from auth header if request.user is not populated by middleware yet
+                const auth = await getAuthUser(request, reply);
+                if (!auth) return;
+                if (!auth.profile.organization_id) return reply.code(400).send({ error: 'No org' });
+                const result = await DBService.getTargetsProgress(auth.profile.organization_id, request.query.range || 'day');
+                return result;
+            }
+
+            if (!(await verifyOrgAccess(request, reply, organizationId))) return;
+
+            const range = request.query.range || 'day';
+            const result = await DBService.getTargetsProgress(organizationId, range);
+            return result;
+        } catch (err) {
+            console.error('[API] Error fetching targets progress:', err.message);
+            return reply.code(500).send({ success: false, error: 'Failed to fetch targets progress' });
+        }
+    });
+
     fastify.get('/api/panel/live-activity', async (request, reply) => {
         try {
             const organizationId = request.query.organizationId;
@@ -812,7 +887,20 @@ async function registerApiRoutes(fastify) {
     });
 
     // Create a new campaign
-    fastify.post('/api/campaigns', async (request, reply) => {
+    fastify.post('/api/campaigns', {
+        schema: {
+            body: {
+                type: 'object',
+                required: ['organizationId', 'name', 'sourceFilter'],
+                properties: {
+                    organizationId: { type: 'string', format: 'uuid' },
+                    name: { type: 'string', minLength: 1, maxLength: 255 },
+                    sourceFilter: { type: 'string', minLength: 1, maxLength: 100 },
+                    description: { type: 'string', maxLength: 1000 }
+                }
+            }
+        }
+    }, async (request, reply) => {
         try {
             const { organizationId, name, sourceFilter, description } = request.body;
             if (!organizationId || !name || !sourceFilter) {
@@ -828,7 +916,25 @@ async function registerApiRoutes(fastify) {
     });
 
     // Update a campaign
-    fastify.put('/api/campaigns/:id', async (request, reply) => {
+    fastify.put('/api/campaigns/:id', {
+        schema: {
+            params: {
+                type: 'object',
+                properties: {
+                    id: { type: 'string', format: 'uuid' }
+                }
+            },
+            body: {
+                type: 'object',
+                properties: {
+                    name: { type: 'string', minLength: 1, maxLength: 255 },
+                    sourceFilter: { type: 'string', minLength: 1, maxLength: 100 },
+                    description: { type: 'string', maxLength: 1000 },
+                    isActive: { type: 'boolean' }
+                }
+            }
+        }
+    }, async (request, reply) => {
         try {
             const { id } = request.params;
             const { name, sourceFilter, description, isActive } = request.body;
@@ -1222,7 +1328,21 @@ async function registerApiRoutes(fastify) {
     });
 
     // Add new phone number
-    fastify.post('/api/phone-numbers', async (request, reply) => {
+    fastify.post('/api/phone-numbers', {
+        schema: {
+            body: {
+                type: 'object',
+                required: ['phoneNumber', 'organizationId'],
+                properties: {
+                    phoneNumber: { type: 'string', minLength: 8, maxLength: 20, pattern: '^[0-9+\\-\\s()]+$' },
+                    displayName: { type: 'string', maxLength: 100 },
+                    organizationId: { type: 'string', format: 'uuid' },
+                    assignedTo: { type: 'string', format: 'uuid' },
+                    campaignId: { type: 'string', format: 'uuid' }
+                }
+            }
+        }
+    }, async (request, reply) => {
         try {
             const { phoneNumber, displayName, organizationId, assignedTo, campaignId } = request.body;
 
@@ -2071,6 +2191,26 @@ async function registerApiRoutes(fastify) {
         } catch (err) {
             console.error('[API] Rep minutes error:', err.message);
             return reply.code(500).send({ success: false, error: 'Failed to get rep minutes' });
+        }
+    });
+
+    // --- TARGETS PROGRESS ---
+    fastify.get('/api/targets/progress', async (request, reply) => {
+        try {
+            const auth = await getAuthUser(request, reply);
+            if (!auth) return;
+
+            const organizationId = auth.profile?.organization_id;
+            if (!organizationId) {
+                return reply.status(403).send({ error: 'No organization assigned' });
+            }
+
+            const range = request.query.range || 'day';
+            const result = await DBService.getTargetsProgress(organizationId, range);
+            return result;
+        } catch (err) {
+            console.error('[API] Targets progress error:', err.message);
+            return reply.code(500).send({ success: false, error: 'Failed to get targets progress' });
         }
     });
 

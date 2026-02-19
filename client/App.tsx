@@ -1,25 +1,21 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Toast } from './components/Common/Toast';
-import { Sidebar } from './components/Layout/Sidebar';
-import { TopBar } from './components/Layout/TopBar';
-import { EmptyCallState } from './components/Call/EmptyCallState';
-import { CallSummaryModal } from './components/Call/CallSummaryModal';
-import { Dashboard } from './components/Dashboard/Dashboard';
-import { ManagerDashboard } from './components/Dashboard/ManagerDashboard';
-import { LeadsDashboard } from './components/Leads/LeadsDashboard';
-import { PipelineDashboard } from './components/Pipeline/PipelineDashboard';
-import { SettingsDashboard } from './components/Settings/SettingsDashboard';
-import { TasksDashboard } from './components/Tasks/TasksDashboard';
-import { TargetsDashboard } from './components/Targets/TargetsDashboard';
-import { PanelDashboard } from './components/Panel/PanelDashboard';
-import { TeamChatDashboard } from './components/Chat/TeamChatDashboard';
-import { ManagerChatDrawer } from './components/Chat/ManagerChatDrawer';
-import { GamificationDashboard } from './components/Gamification/GamificationDashboard';
-import { RemindersModal } from './components/Notifications/RemindersModal';
-import { SuperAdminDashboard } from './components/SuperAdmin/SuperAdminDashboard';
-import { Login } from './components/Auth/Login';
-import { Button } from './components/Common/Button';
+import { Toast, Button, ErrorBoundary } from './src/components/ui';
+import { Sidebar, TopBar } from './src/components/layout';
+import { EmptyCallState, CallSummaryModal } from './src/components/calls';
+import { Dashboard, ManagerDashboard } from './src/components/dashboard';
+import { LeadsDashboard } from './src/components/leads';
+import { PipelineDashboard } from './src/components/pipeline';
+import { SettingsDashboard } from './src/components/settings';
+import { TasksDashboard } from './src/components/tasks';
+import { TargetsDashboard } from './src/components/targets';
+import { PanelDashboard } from './src/components/panel/PanelDashboard';
+import { TeamChatDashboard } from './src/components/chat/TeamChatDashboard';
+import { ManagerChatDrawer } from './src/components/chat/ManagerChatDrawer';
+import { GamificationDashboard } from './src/components/gamification/GamificationDashboard';
+import { RemindersModal } from './src/components/notifications/RemindersModal';
+import { SuperAdminDashboard } from './src/components/superadmin/SuperAdminDashboard';
+import { Login, AcceptInvitationPage } from './src/components/auth';
 import { Lock, LayoutDashboard, Loader2, AlertTriangle } from 'lucide-react';
 import {
   CURRENT_USER
@@ -438,7 +434,6 @@ function SalesFlowApp() {
 }
 
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
-import { AcceptInvitationPage } from './components/Auth/AcceptInvitationPage';
 
 // Wrapper to check if we're on invite route
 function AppRoutes() {
@@ -460,15 +455,17 @@ function AppRoutes() {
 // Global Provider Wrapper
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/invite/:token" element={<AcceptInvitationPage />} />
-        <Route path="*" element={
-          <CallProvider>
-            <SalesFlowApp />
-          </CallProvider>
-        } />
-      </Routes>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/invite/:token" element={<AcceptInvitationPage />} />
+          <Route path="*" element={
+            <CallProvider>
+              <SalesFlowApp />
+            </CallProvider>
+          } />
+        </Routes>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }

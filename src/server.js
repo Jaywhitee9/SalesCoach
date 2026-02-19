@@ -5,9 +5,52 @@ const path = require('path');
 // Plugins
 fastify.register(require('@fastify/formbody'));
 fastify.register(require('@fastify/websocket'));
+
+// CORS Configuration - Environment-based whitelist
+const corsOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map(o => o.trim())
+    : ['http://localhost:5173', 'http://localhost:3000'];
+
 fastify.register(require('@fastify/cors'), {
-    origin: '*',
+    origin: (origin, cb) => {
+        // Allow requests with no origin (mobile apps, curl, etc.)
+        if (!origin) {
+            cb(null, true);
+            return;
+        }
+
+        // Check if origin is in whitelist
+        if (corsOrigins.includes(origin)) {
+            cb(null, true);
+        } else {
+            console.warn(`[CORS] Blocked request from unauthorized origin: ${origin}`);
+            cb(new Error('Not allowed by CORS'), false);
+        }
+    },
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+});
+
+// Rate Limiting - Protect against DoS attacks
+fastify.register(require('@fastify/rate-limit'), {
+    global: true,
+    max: 100, // 100 requests
+    timeWindow: '1 minute',
+    cache: 10000,
+    allowList: ['127.0.0.1'], // Allow localhost
+    skipOnError: true, // Continue if Redis/store fails
+    keyGenerator: (request) => {
+        // Use IP address as key
+        return request.ip || request.headers['x-forwarded-for'] || request.headers['x-real-ip'] || 'unknown';
+    },
+    errorResponseBuilder: (request, context) => {
+        return {
+            statusCode: 429,
+            error: 'Too Many Requests',
+            message: `Rate limit exceeded. Try again in ${Math.ceil(context.ttl / 1000)} seconds.`,
+            retryAfter: context.ttl
+        };
+    }
 });
 
 // Static Files (Serve Client)

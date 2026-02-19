@@ -6,8 +6,16 @@ async function registerTokenRoutes(fastify) {
     /**
      * GET /api/token
      * Returns a capability token for the browser client
+     * Rate limited: 10 requests per minute for auth security
      */
-    fastify.get('/api/token', async (request, reply) => {
+    fastify.get('/api/token', {
+        config: {
+            rateLimit: {
+                max: 10,
+                timeWindow: '1 minute'
+            }
+        }
+    }, async (request, reply) => {
         const { identity } = request.query;
 
         // Use a random identity if none provided (e.g. user_123)

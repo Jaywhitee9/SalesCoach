@@ -1,78 +1,105 @@
+/**
+ * Client-side type definitions for Sales Coach
+ * This file re-exports shared types and adds client-specific UI types
+ */
 
-export interface User {
-  id: string;
-  name: string;
-  avatar: string;
-  role: string;
-  type: 'rep' | 'manager' | 'super_admin';
-  email?: string;
-  organization_id?: string;
-  center_type?: 'sales' | 'support';
-  preferences?: {
-    darkMode?: boolean;
-    leadNotifications?: boolean;
-    language?: string;
-    timezone?: string;
-  };
-}
+// Re-export all shared entity types
+export type {
+  User,
+  UserRole,
+  UserPreferences,
+  Profile,
+  TeamMember,
+  RepCapacity,
+  CenterType
+} from '../types/entities/User';
 
-export type UserRole = 'rep' | 'manager' | 'super_admin';
+export type {
+  Lead,
+  LeadStatus,
+  LeadPriority,
+  LeadSource,
+  LeadScoreDetails,
+  LeadAtRisk,
+  Deal
+} from '../types/entities/Lead';
 
-export interface Lead {
-  id: string;
-  name: string;
-  company: string;
-  phone: string;
-  email: string;
-  status: string;
-  priority: 'Hot' | 'Warm' | 'Cold';
-  value: string;
-  // New fields for Leads Dashboard
-  owner?: User;
-  source?: string;
-  score?: number;
-  scoreDetails?: {
-    fit?: number;
-    activity?: number;
-    intent?: number;
-    reasoning?: string;
-    recommendations?: string[];
-    generatedAt?: string;
-  };
-  lastActivity?: string;
-  nextStep?: string;
-  tags?: string[];
-  createdAt?: string;
-}
+export type {
+  Call,
+  CallStatus,
+  CallDirection,
+  CallDisposition,
+  Message,
+  Transcript,
+  AccumulatedSignals,
+  CallSummary,
+  CallMetrics,
+  RecentCall,
+  SpeakerType,
+  SentimentType
+} from '../types/entities/Call';
 
-export interface LeadAtRisk extends Lead {
-  riskReason: string; // e.g., "No contact 6h"
-  timeSinceActivity: string; // e.g., "6 hours"
-}
+export type {
+  Organization,
+  OrganizationPlan,
+  OrganizationStatus,
+  OrganizationSettings,
+  ApiKey,
+  Campaign,
+  Knowledge,
+  DistributionMethod
+} from '../types/entities/Organization';
 
-export interface RepCapacity {
-  id: string;
-  user: User;
-  activeLeads: number;
-  newLeadsToday: number;
-  status: 'available' | 'moderate' | 'busy';
-}
+export type {
+  RepTargets,
+  TargetMetric,
+  TargetPeriod,
+  GoalProgress
+} from '../types/entities/Target';
+
+export type {
+  Task,
+  DashboardTask
+} from '../types/entities/Task';
+
+export type {
+  Notification,
+  NotificationType
+} from '../types/entities/Notification';
+
+// Re-export API types
+export type {
+  ApiResponse,
+  StatsMetrics,
+  StatsResponse,
+  PerformanceMetrics,
+  PanelStatsResult,
+  FunnelStage,
+  PipelineFunnelResponse,
+  SourceMetric,
+  PipelineSourcesResponse,
+  TeamMembersResponse,
+  ServiceStatus,
+  SystemHealthResponse,
+  GuardrailIssue,
+  GuardrailCheckResponse
+} from '../types/api/responses';
+
+export type {
+  CreateLeadRequest,
+  UpdateLeadRequest,
+  LeadWebhookRequest,
+  DashboardQueryParams,
+  GenerateQuoteRequest
+} from '../types/api/requests';
+
+// Client-specific UI types (not used in backend)
 
 export interface Stage {
   id: string;
   label: string;
   description: string;
   status: 'completed' | 'current' | 'upcoming';
-}
-
-export interface Message {
-  id: string;
-  speaker: 'agent' | 'customer';
-  text: string;
-  timestamp: string;
-  sentiment?: 'positive' | 'neutral' | 'negative';
-  highlight?: boolean; // For keywords like "price"
-  isFinal?: boolean; // For real-time transcription
 }
 
 export interface Insight {
@@ -89,13 +116,6 @@ export interface CoachSuggestion {
   type: 'tip' | 'warning' | 'info';
 }
 
-export interface CallMetrics {
-  duration: string;
-  talkRatio: number; // 0-100 for agent
-  sentiment: 'Positive' | 'Neutral' | 'Negative';
-}
-
-// Dashboard Specific Types
 export interface KPIMetric {
   label: string;
   value: string;
@@ -104,34 +124,12 @@ export interface KPIMetric {
   subtext?: string;
 }
 
-export interface DashboardTask {
-  id: string;
-  title: string;
-  leadName: string;
-  dueDate: string;
-  rawDate?: string; // Optional raw date
-  completed: boolean;
-}
-
-export interface RecentCall {
-  id: string;
-  leadName: string;
-  status: 'Completed' | 'Missed' | 'In Progress' | 'Scheduled';
-  outcome: string;
-  time: string;
-  qualityScore?: number;
-  issueTag?: string; // e.g. "Price Objection"
-  repName?: string; // For manager view
-  repAvatar?: string;
-}
-
 export interface DailyTip {
   id: string;
   category: 'Focus' | 'Strength' | 'Improve';
   text: string;
 }
 
-// Manager Specific Types
 export interface PipelineStage {
   name: string;
   value: number;
@@ -139,70 +137,6 @@ export interface PipelineStage {
   color: string;
 }
 
-export interface FunnelStage {
-  id: string;
-  label: string;
-  count: number;
-  percentage: number; // of total
-  conversionRate: number; // to next stage
-  color: string;
-}
-
-export interface SourceMetric {
-  name: string;
-  leads: number;
-  deals: number;
-  conversionRate: number;
-  revenue: number;
-}
-
-export interface Deal {
-  id: string;
-  company: string;
-  owner: string;
-  ownerAvatar: string;
-  stage: string;
-  value: string;
-  closeDate: string;
-}
-
-export interface TeamMember {
-  id: string;
-  name: string;
-  avatar: string;
-  calls: number;
-  meetings: number;
-  winRate: number;
-  qualityScore: number;
-  trend: 'up' | 'down' | 'neutral';
-}
-
-// Targets Types
-export interface TargetMetric {
-  target: number;
-  current: number;
-  unit?: string;
-}
-
-export interface RepTargets {
-  id: string;
-  userId: string;
-  period: 'day' | 'week' | 'month'; // Base configuration
-
-  // Activity
-  calls: TargetMetric;
-  connectedCalls: TargetMetric;
-  talkTime: TargetMetric; // Minutes
-
-  // Outcome
-  deals: TargetMetric;
-  revenue: TargetMetric;
-
-  // Calculated
-  productivityScore: number;
-}
-
-// Chat Types
 export interface ChatMessage {
   id: string;
   senderId: string;
@@ -226,32 +160,8 @@ export interface ChatThread {
   messages: ChatMessage[];
 }
 
-// Settings Types
-export interface ServiceStatus {
-  id: string;
-  name: string;
-  status: 'operational' | 'degraded' | 'down';
-  latency?: string;
-  lastCheck: string;
-}
-
 export interface SettingsCategory {
   id: string;
   label: string;
   icon: any; // Using 'any' for Lucide icon component type convenience
-}
-
-// Super Admin Types
-export interface Organization {
-  id: string;
-  name: string;
-  plan: 'Free' | 'Pro' | 'Enterprise';
-  center_type?: 'sales' | 'support';
-  status: 'Active' | 'Suspended' | 'Trial';
-  logo: string;
-  usersCount: number;
-  mrr: number; // Monthly Recurring Revenue (Income)
-  estCost: number; // Operational Cost (AI/Telephony)
-  gmv: number; // Client Success (Value of deals closed by them)
-  joinedAt: string;
 }

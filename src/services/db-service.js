@@ -1,9 +1,30 @@
 const supabase = require('../lib/supabase'); // Corrected Path
 const { dashboardCache } = require('../utils/cache.js');
 
+/**
+ * @typedef {import('./db-service-types').CallData} CallData
+ * @typedef {import('./db-service-types').MessageData} MessageData
+ * @typedef {import('./db-service-types').StatsMetrics} StatsMetrics
+ * @typedef {import('./db-service-types').DBLead} DBLead
+ * @typedef {import('./db-service-types').DBCall} DBCall
+ * @typedef {import('./db-service-types').CreateLeadInput} CreateLeadInput
+ * @typedef {import('./db-service-types').HotLead} HotLead
+ * @typedef {import('./db-service-types').LeadAtRisk} LeadAtRisk
+ * @typedef {import('./db-service-types').QueuedLead} QueuedLead
+ * @typedef {import('./db-service-types').PanelStatsResult} PanelStatsResult
+ * @typedef {import('./db-service-types').FunnelStage} FunnelStage
+ * @typedef {import('./db-service-types').SourceMetric} SourceMetric
+ */
+
 class DBService {
 
     // --- CALLS ---
+
+    /**
+     * Save call data to database after call completion
+     * @param {CallData} callData - Call data including transcripts and coaching
+     * @returns {Promise<DBCall|null>} Saved call record or null on error
+     */
     async saveCall(callData) {
         try {
             // PHASE 3: Fetch organization_id from agent's profile
@@ -170,6 +191,12 @@ class DBService {
         }
     }
 
+    /**
+     * Get recent calls for an organization
+     * @param {number} [limit=10] - Maximum number of calls to return
+     * @param {string|null} organizationId - Organization ID (required for multi-tenant isolation)
+     * @returns {Promise<DBCall[]>} Array of recent calls
+     */
     async getRecentCalls(limit = 10, organizationId = null) {
         try {
             if (!organizationId) {
@@ -191,7 +218,12 @@ class DBService {
         }
     }
 
-    // Get call history for a specific lead
+    /**
+     * Get call history for a specific lead
+     * @param {string} leadId - Lead ID
+     * @param {number} [limit=50] - Maximum number of calls to return
+     * @returns {Promise<DBCall[]>} Array of calls for the lead
+     */
     async getCallsByLead(leadId, limit = 50) {
         try {
             const { data, error } = await supabase
@@ -211,6 +243,12 @@ class DBService {
     }
 
     // --- LEADS ---
+
+    /**
+     * Get all leads for an organization
+     * @param {string} organizationId - Organization ID
+     * @returns {Promise<DBLead[]>} Array of leads
+     */
     async getLeads(organizationId) {
         try {
             let query = supabase
@@ -232,6 +270,11 @@ class DBService {
         }
     }
 
+    /**
+     * Seed leads into the database (bulk insert)
+     * @param {Array<Object>} initialLeads - Array of lead objects to insert
+     * @returns {Promise<boolean>} True if successful, false otherwise
+     */
     async seedLeads(initialLeads) {
         const userId = await getSystemUserId();
 
@@ -262,7 +305,11 @@ class DBService {
         }
     }
 
-    // Delete a lead by ID
+    /**
+     * Delete a lead by ID
+     * @param {string} leadId - Lead ID to delete
+     * @returns {Promise<boolean>} True if successful, false otherwise
+     */
     async deleteLead(leadId) {
         try {
             // First check if lead exists
@@ -291,8 +338,13 @@ class DBService {
         }
     }
 
-    // Create a new lead (used by webhook for external sources)
-    // Using RPC function to bypass PostgREST schema cache issues
+    /**
+     * Create a new lead (used by webhook for external sources)
+     * Uses RPC function to bypass PostgREST schema cache issues
+     * @param {CreateLeadInput} leadData - Lead data to create
+     * @returns {Promise<DBLead>} Created lead record
+     * @throws {Error} If creation fails
+     */
     async createLead(leadData) {
         try {
             // Call the RPC function
@@ -323,7 +375,12 @@ class DBService {
         }
     }
 
-    // Update call with summary data
+    /**
+     * Update call with summary data
+     * @param {string} callSid - Twilio Call SID
+     * @param {Object} summaryData - Summary data to update
+     * @returns {Promise<boolean>} True if successful, false otherwise
+     */
     async updateCallSummary(callSid, summaryData) {
         try {
             // Find call by recording_url containing the callSid
@@ -355,7 +412,13 @@ class DBService {
         }
     }
 
-    // Get statistics for KPIs with time range support
+    /**
+     * Get statistics for KPIs with time range support
+     * @param {'day'|'week'|'month'} [timeRange='day'] - Time range for statistics
+     * @param {string|null} [organizationId=null] - Organization ID filter
+     * @param {string|null} [userId=null] - User ID filter (for rep-specific stats)
+     * @returns {Promise<StatsMetrics>} Statistics object
+     */
     async getStats(timeRange = 'day', organizationId = null, userId = null) {
         const now = new Date();
         let startDate = new Date();
@@ -471,12 +534,18 @@ class DBService {
         }
     }
 
-    // Keep old function for backward compatibility
+    /**
+     * Get daily statistics (backward compatibility wrapper)
+     * @returns {Promise<StatsMetrics>} Daily statistics
+     */
     async getDailyStats() {
         return this.getStats('day');
     }
 
-    // Get weekly performance data for chart
+    /**
+     * Get weekly performance data for chart
+     * @returns {Promise<import('./db-service-types').WeeklyPerformanceData[]>} Array of daily performance data
+     */
     async getWeeklyPerformance() {
         const dayNames = ['א', 'ב', 'ג', 'ד', 'ה', 'ו', 'ש'];
         const result = [];
@@ -524,6 +593,12 @@ class DBService {
         }
     }
     // --- MESSAGES ---
+
+    /**
+     * Save a message to the database
+     * @param {MessageData} messageData - Message data to save
+     * @returns {Promise<void>}
+     */
     async saveMessage(messageData) {
         try {
             const { error } = await supabase
@@ -543,6 +618,12 @@ class DBService {
         }
     }
 
+    /**
+     * Get messages for a lead
+     * @param {string} leadId - Lead ID
+     * @param {number} [limit=50] - Maximum number of messages to return
+     * @returns {Promise<Array>} Array of messages
+     */
     async getMessages(leadId, limit = 50) {
         try {
             const { data, error } = await supabase
@@ -562,7 +643,13 @@ class DBService {
 
     // --- PANEL DASHBOARD FUNCTIONS ---
 
-    // Get hot leads (priority = 'Hot')
+    /**
+     * Get hot leads (priority = 'Hot')
+     * @param {string|null} userId - User ID filter (optional)
+     * @param {number} [limit=10] - Maximum number of leads to return
+     * @param {string} organizationId - Organization ID
+     * @returns {Promise<HotLead[]>} Array of hot leads
+     */
     async getHotLeads(userId, limit = 10, organizationId) {
         try {
             let query = supabase
@@ -597,7 +684,14 @@ class DBService {
         }
     }
 
-    // Get leads at risk (no activity for X hours)
+    /**
+     * Get leads at risk (no activity for X hours)
+     * @param {string|null} userId - User ID filter (optional)
+     * @param {number} [hoursThreshold=48] - Hours since last activity to consider "at risk"
+     * @param {number} [limit=10] - Maximum number of leads to return
+     * @param {string} organizationId - Organization ID
+     * @returns {Promise<LeadAtRisk[]>} Array of at-risk leads
+     */
     async getLeadsAtRisk(userId, hoursThreshold = 48, limit = 10, organizationId) {
         try {
             const cutoffTime = new Date(Date.now() - hoursThreshold * 60 * 60 * 1000).toISOString();
@@ -640,7 +734,13 @@ class DBService {
         }
     }
 
-    // Get lead queue for rep
+    /**
+     * Get lead queue for rep
+     * @param {string|null} userId - User ID filter (optional)
+     * @param {number} [limit=20] - Maximum number of leads to return
+     * @param {string} organizationId - Organization ID
+     * @returns {Promise<QueuedLead[]>} Array of queued leads
+     */
     async getLeadQueue(userId, limit = 20, organizationId) {
         try {
             let query = supabase
@@ -678,7 +778,13 @@ class DBService {
         }
     }
 
-    // Get panel stats (KPIs for rep)
+    /**
+     * Get panel stats (KPIs for rep or organization)
+     * @param {string|null} userId - User ID filter (optional, for rep-specific stats)
+     * @param {'day'|'week'|'month'} [timeRange='day'] - Time range for statistics
+     * @param {string} organizationId - Organization ID
+     * @returns {Promise<PanelStatsResult>} Panel statistics object
+     */
     async getPanelStats(userId, timeRange = 'day', organizationId) {
         try {
             const now = new Date();
@@ -2587,6 +2693,71 @@ class DBService {
                 topVisions: [],
                 totalCalls: 0
             };
+        }
+    }
+
+    async getTargetsProgress(organizationId, timeRange = 'day') {
+        try {
+            const now = new Date();
+            let startDate;
+            switch (timeRange) {
+                case 'week':
+                    startDate = new Date(now);
+                    startDate.setDate(startDate.getDate() - 7);
+                    break;
+                case 'month':
+                    startDate = new Date(now);
+                    startDate.setMonth(startDate.getMonth() - 1);
+                    break;
+                default: // day
+                    startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            }
+            const startISO = startDate.toISOString();
+
+            // Parallel queries: calls + deals
+            const [callsResult, dealsResult] = await Promise.all([
+                supabase
+                    .from('calls')
+                    .select('agent_id, status, duration')
+                    .eq('organization_id', organizationId)
+                    .gte('created_at', startISO),
+                supabase
+                    .from('leads')
+                    .select('owner_id, value')
+                    .eq('organization_id', organizationId)
+                    .eq('status', 'Closed')
+                    .gte('updated_at', startISO)
+            ]);
+
+            const calls = callsResult.data || [];
+            const deals = dealsResult.data || [];
+
+            // Build per-user progress map
+            const progress = {};
+
+            for (const call of calls) {
+                const uid = call.agent_id;
+                if (!uid) continue;
+                if (!progress[uid]) progress[uid] = { calls: 0, connectedCalls: 0, talkTime: 0, deals: 0, revenue: 0 };
+                progress[uid].calls++;
+                if (call.status === 'completed') {
+                    progress[uid].connectedCalls++;
+                    progress[uid].talkTime += Math.round((call.duration || 0) / 60);
+                }
+            }
+
+            for (const deal of deals) {
+                const uid = deal.owner_id;
+                if (!uid) continue;
+                if (!progress[uid]) progress[uid] = { calls: 0, connectedCalls: 0, talkTime: 0, deals: 0, revenue: 0 };
+                progress[uid].deals++;
+                progress[uid].revenue += (deal.value || 0);
+            }
+
+            return { success: true, progress };
+        } catch (err) {
+            console.error('[DB] getTargetsProgress error:', err.message);
+            return { success: true, progress: {} };
         }
     }
 }
