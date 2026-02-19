@@ -25,6 +25,45 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@components/*": [
+        "./src/components/*"
+      ],
+      "@ui/*": [
+        "./src/components/ui/*"
+      ],
+      "@leads/*": [
+        "./src/components/leads/*"
+      ],
+      "@calls/*": [
+        "./src/components/calls/*"
+      ],
+      "@dashboard/*": [
+        "./src/components/dashboard/*"
+      ],
+      "@targets/*": [
+        "./src/components/targets/*"
+      ],
+      "@pipeline/*": [
+        "./src/components/pipeline/*"
+      ],
+      "@tasks/*": [
+        "./src/components/tasks/*"
+      ],
+      "@settings/*": [
+        "./src/components/settings/*"
+      ],
+      "@layout/*": [
+        "./src/components/layout/*"
+      ],
+      "@auth/*": [
+        "./src/components/auth/*"
+      ],
+      "@hooks/*": [
+        "./src/hooks/*"
+      ],
+      "@types": [
+        "../types"
       ]
     },
     "allowImportingTsExtensions": true,

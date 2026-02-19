@@ -39,6 +39,7 @@ fastify.register(require('@fastify/cors'), {
 // Rate limiting
 fastify.register(require('@fastify/rate-limit'), globalRateLimit);
 
+
 // Static Files (Serve Client)
 fastify.register(require('@fastify/static'), {
     root: path.join(__dirname, '../client/dist'),

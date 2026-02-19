@@ -104,7 +104,7 @@ export const useTasks = (organizationId?: string, userId?: string) => {
         }
     };
 
-    const addTask = async (title: string, leadId?: string, dueDate?: Date) => {
+    const addTask = async (title: string, leadId?: string, dueDate?: Date, assigneeId?: string) => {
         try {
             // Check Auth (User & Session)
             const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -123,7 +123,10 @@ export const useTasks = (organizationId?: string, userId?: string) => {
 
             if (!activeUser) throw new Error('No user logged in. Please refresh or log in again.');
 
-            console.log('Adding task for user:', activeUser.id, { title, leadId, dueDate });
+            // Determine Owner: If assigneeId is provided (Manager assigning), use it. Otherwise use activeUser
+            const ownerId = assigneeId || activeUser.id;
+
+            console.log('Adding task:', { title, leadId, dueDate, ownerId, createdBy: activeUser.id });
 
             // Proceed with Insert
             const { error, data } = await supabase
@@ -132,9 +135,9 @@ export const useTasks = (organizationId?: string, userId?: string) => {
                     title,
                     lead_id: leadId,
                     due_date: dueDate || new Date(),
-                    owner_id: activeUser.id,
+                    owner_id: ownerId,
                     completed: false
-                    // organization_id is AUTO-ASSIGNED by Trigger. We DO NOT send it.
+                    // organization_id is AUTO-ASSIGNED by Trigger
                 })
                 .select();
 

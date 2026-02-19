@@ -100,8 +100,14 @@ export const useLeads = (initialStatus?: string, organizationId?: string, userId
             const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
             let ownerId = newLead.owner?.id;
 
-            if (!ownerId || !uuidRegex.test(ownerId)) {
-                // Try auto-distribution first
+            // CRITICAL: For reps, ALWAYS default to themselves unless explicitly assigned by a manager
+            const isRepUser = userRole === 'rep' || userRole === 'sales_rep';
+            if (isRepUser) {
+                // Reps should own their own leads by default
+                ownerId = userId || session.user.id;
+                console.log('[useLeads] Rep creating lead - forcing owner to self:', ownerId);
+            } else if (!ownerId || !uuidRegex.test(ownerId)) {
+                // For managers: try auto-distribution
                 try {
                     const distRes = await fetch(`/api/org/next-assignee?organizationId=${profile.organization_id}`);
                     const distJson = await distRes.json();
@@ -128,15 +134,24 @@ export const useLeads = (initialStatus?: string, organizationId?: string, userId
                 value: newLead.value ? parseFloat(newLead.value.replace(/[^0-9.]/g, '')) : 0,
                 tags: newLead.tags,
                 owner_id: ownerId,
-                organization_id: profile.organization_id // Critical Multi-Tenant Field
+                organization_id: profile.organization_id, // Critical Multi-Tenant Field
+                org_id: profile.organization_id // Legacy column (NOT NULL constraint)
             };
 
-            // 3. Insert
-            const { error: insertError } = await supabase
-                .from('leads')
-                .insert([payload]);
+            console.log('[useLeads] INSERT payload:', JSON.stringify(payload));
 
-            if (insertError) throw insertError;
+            // 3. Insert
+            const { data: insertedData, error: insertError } = await supabase
+                .from('leads')
+                .insert([payload])
+                .select();
+
+            if (insertError) {
+                console.error('[useLeads] INSERT ERROR:', insertError.code, insertError.message, insertError.details);
+                throw insertError;
+            }
+
+            console.log('[useLeads] INSERT SUCCESS:', insertedData?.length, 'rows inserted');
 
             // 4. Refresh List
             await fetchLeads();
@@ -207,8 +222,6 @@ export const useLeads = (initialStatus?: string, organizationId?: string, userId
                 console.error('DB Update Error:', error);
                 throw error;
             }
-
-            if (error) throw error;
 
             // Success: No need to re-fetch if we are confident, or fetch silently
             // Currently avoiding re-fetch to keep it super smooth as requested

@@ -62,6 +62,7 @@ interface CallContextType {
     device: Device | null;
     activeCall: Call | null;
     connectionStatus: string;
+    connectionError: { code: number; message: string } | null;
     callStatus: string;
     isReady: boolean;
     isOnCall: boolean;
@@ -138,6 +139,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const [isOnCall, setIsOnCall] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
     const [callDuration, setCallDuration] = useState(0);
+    const [connectionError, setConnectionError] = useState<{ code: number; message: string } | null>(null);
 
     // ========================================
     // [P0] CALL SUMMARY AUTO-DISPLAY
@@ -242,6 +244,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
             if (connectionStatus === 'ready') return;
             setConnectionStatus('connecting');
+            setConnectionError(null);
             console.log('[Twilio] Fetching token...');
 
             const res = await fetch('/api/token');
@@ -283,10 +286,15 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 // Handle specific Twilio errors
                 if (err.code === 31401) {
                     console.error('[Twilio] Permission Denied - Check microphone access');
+                    setConnectionError({ code: 31401, message: 'שגיאת מיקרופון: בדוק הרשאות בדפדפן' });
                 } else if (err.code === 31005 || err.code === 31009) {
-                    console.error('[Twilio] WebSocket/Transport Error (31005/31009) - Check network / firewall / region');
-                } else if (err.code === 31000) {
-                    console.error('[Twilio] Unknown Error - See details above');
+                    console.error('[Twilio] WebSocket/Transport Error - Network issue');
+                    setConnectionError({ code: err.code, message: 'שגיאת רשת: בדוק חיבור לאינטרנט' });
+                } else if (err.code === 20101) {
+                    console.error('[Twilio] Invalid Access Token - likely backend credentials issue');
+                    setConnectionError({ code: 20101, message: 'שגיאת אימות Twilio: מפתח API לא תקף במערכת' });
+                } else {
+                    setConnectionError({ code: err.code || 0, message: err.message || 'שגיאה כללית בחיבור' });
                 }
 
                 setConnectionStatus('error');
@@ -488,12 +496,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.log('[WS] ✅ Connected successfully');
             setIsReconnecting(false);
             setReconnectAttempt(0);
-            
+
             // Request missed messages since last known time
             if (reconnectAttempt > 0) {
-                ws.send(JSON.stringify({ 
-                    type: 'sync_request', 
-                    since: lastMessageTimeRef.current 
+                ws.send(JSON.stringify({
+                    type: 'sync_request',
+                    since: lastMessageTimeRef.current
                 }));
             }
         };
@@ -728,12 +736,12 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         ws.onclose = (event) => {
             console.log(`[WS] 🔌 Closed (${event.code}: ${event.reason || 'No reason'})`);
-            
+
             // Auto-reconnect with exponential backoff (if not clean close and call is still active)
             if (!event.wasClean && reconnectAttempt < 10 && isOnCall) {
                 const delay = Math.min(1000 * Math.pow(2, reconnectAttempt), 30000); // Max 30s
                 console.log(`[WS] 🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempt + 1})`);
-                
+
                 setIsReconnecting(true);
                 reconnectTimeoutRef.current = setTimeout(() => {
                     setReconnectAttempt(prev => prev + 1);
@@ -1137,6 +1145,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({ children
             device,
             activeCall,
             connectionStatus,
+            connectionError,
             callStatus,
             isReady,
             isOnCall,

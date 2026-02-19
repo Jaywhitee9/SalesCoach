@@ -7,7 +7,21 @@
     "start": "node src/server.js",
     "dev": "node src/server.js",
     "build": "npm install --production=false && cd client && npm install && npm run build && cd ..",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "type-check": "tsc --noEmit && cd client && npm run type-check",
+    "type-check:backend": "tsc --project jsconfig.json --noEmit",
+    "type-check:frontend": "cd client && npm run type-check",
+    "test": "npm run test:backend && npm run test:frontend",
+    "test:backend": "vitest run --config vitest.config.js",
+    "test:backend:watch": "vitest --config vitest.config.js",
+    "test:backend:ui": "vitest --ui --config vitest.config.js",
+    "test:backend:coverage": "vitest run --coverage --config vitest.config.js",
+    "test:frontend": "cd client && vitest run",
+    "test:frontend:watch": "cd client && vitest",
+    "test:frontend:ui": "cd client && vitest --ui",
+    "test:frontend:coverage": "cd client && vitest run --coverage",
+    "test:integration": "vitest run tests/integration --config vitest.config.js",
+    "test:all": "npm run test:backend && npm run test:frontend && npm run test:integration",
+    "test:ci": "npm run type-check && npm run test:all"
   },
   "keywords": [],
   "author": "",
@@ -31,6 +45,12 @@
     "twilio": "^5.10.7",
     "uuid": "^13.0.0",
     "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "typescript": "~5.8.2",
+    "vitest": "^4.0.18"
   },
   "engines": {
     "node": ">=18.0.0"

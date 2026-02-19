@@ -1,24 +1,21 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Sidebar } from './components/Layout/Sidebar';
-import { TopBar } from './components/Layout/TopBar';
-import { EmptyCallState } from './components/Call/EmptyCallState';
-import { CallSummaryModal } from './components/Call/CallSummaryModal';
-import { Dashboard } from './components/Dashboard/Dashboard';
-import { ManagerDashboard } from './components/Dashboard/ManagerDashboard';
-import { LeadsDashboard } from './components/Leads/LeadsDashboard';
-import { PipelineDashboard } from './components/Pipeline/PipelineDashboard';
-import { SettingsDashboard } from './components/Settings/SettingsDashboard';
-import { TasksDashboard } from './components/Tasks/TasksDashboard';
-import { TargetsDashboard } from './components/Targets/TargetsDashboard';
-import { PanelDashboard } from './components/Panel/PanelDashboard';
-import { TeamChatDashboard } from './components/Chat/TeamChatDashboard';
-import { ManagerChatDrawer } from './components/Chat/ManagerChatDrawer';
-import { GamificationDashboard } from './components/Gamification/GamificationDashboard';
-import { RemindersModal } from './components/Notifications/RemindersModal';
-import { SuperAdminDashboard } from './components/SuperAdmin/SuperAdminDashboard';
-import { Login } from './components/Auth/Login';
-import { Button } from './components/Common/Button';
+import { Toast, Button, ErrorBoundary } from './src/components/ui';
+import { Sidebar, TopBar } from './src/components/layout';
+import { EmptyCallState, CallSummaryModal } from './src/components/calls';
+import { Dashboard, ManagerDashboard } from './src/components/dashboard';
+import { LeadsDashboard } from './src/components/leads';
+import { PipelineDashboard } from './src/components/pipeline';
+import { SettingsDashboard } from './src/components/settings';
+import { TasksDashboard } from './src/components/tasks';
+import { TargetsDashboard } from './src/components/targets';
+import { PanelDashboard } from './src/components/panel/PanelDashboard';
+import { TeamChatDashboard } from './src/components/chat/TeamChatDashboard';
+import { ManagerChatDrawer } from './src/components/chat/ManagerChatDrawer';
+import { GamificationDashboard } from './src/components/gamification/GamificationDashboard';
+import { RemindersModal } from './src/components/notifications/RemindersModal';
+import { SuperAdminDashboard } from './src/components/superadmin/SuperAdminDashboard';
+import { Login, AcceptInvitationPage } from './src/components/auth';
 import { Lock, LayoutDashboard, Loader2, AlertTriangle } from 'lucide-react';
 import {
   CURRENT_USER
@@ -38,14 +35,19 @@ function SalesFlowApp() {
   const [isDarkMode, setIsDarkMode] = useState(() => {
     // Check localStorage or system preference on init
     if (typeof window !== 'undefined') {
-      // FORCE WHITE MODE DEFAULT
-      // Ignore localStorage for now to guarantee white mode
+      const stored = localStorage.getItem('isDarkMode');
+      // If stored in localStorage, respect it (it might be set from DB sync previously)
+      if (stored) return JSON.parse(stored);
+
+      // Default false
       document.documentElement.classList.remove('dark');
       return false;
     }
     document.documentElement.classList.remove('dark');
     return false;
   });
+
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
 
   const toggleTheme = () => {
     setIsDarkMode((prev: boolean) => {
@@ -62,7 +64,6 @@ function SalesFlowApp() {
 
   // Sync on mount and change
   useEffect(() => {
-    console.log('[Theme] isDarkMode changed to:', isDarkMode);
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
     } else {
@@ -137,11 +138,17 @@ function SalesFlowApp() {
               role: profile.role, // Important for Admin check
               type: profile.role === 'platform_admin' ? 'super_admin' : profile.role, // Map to new design types
               organization_id: profile.organization_id,
-              center_type: (Array.isArray(profile.organization) ? profile.organization[0]?.center_type : profile.organization?.center_type) || 'sales'
+              center_type: (Array.isArray(profile.organization) ? profile.organization[0]?.center_type : profile.organization?.center_type) || 'sales',
+              preferences: profile.preferences // Load preferences
             } as User;
 
             setCurrentUser(userWithCenterType);
             setIsAuthenticated(true);
+
+            // Apply Dark Mode Preference if exists
+            if (userWithCenterType.preferences?.darkMode !== undefined) {
+              setIsDarkMode(userWithCenterType.preferences.darkMode);
+            }
           }
         }
       } catch (e: any) {
@@ -162,6 +169,34 @@ function SalesFlowApp() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // --- REALTIME NOTIFICATIONS ---
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Listen for new leads assigned to me
+    const channel = supabase.channel('public:leads:notifications')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'leads' },
+        (payload) => {
+          // Check if I am the owner
+          if (payload.new.owner_id === currentUser.id) {
+            // Check if notifications are enabled (default true)
+            const enabled = currentUser.preferences?.leadNotifications ?? true;
+            if (enabled) {
+              setToast({ message: `🔔 התקבל ליד חדש: ${payload.new.name || 'ללא שם'}`, type: 'success' });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser]); // Re-subscribe if currentUser changes (e.g. preferences update)
+
 
   // --- TWILIO DEVICE ---
   // Defer initialization until first user interaction to avoid AudioContext warning
@@ -196,6 +231,10 @@ function SalesFlowApp() {
     setCurrentUser(user);
     setIsAuthenticated(true);
     setActivePage('dashboard');
+    // Apply preferences on login
+    if (user.preferences?.darkMode !== undefined) {
+      setIsDarkMode(user.preferences.darkMode);
+    }
   };
 
   const handleLogout = async () => {
@@ -205,6 +244,13 @@ function SalesFlowApp() {
   };
 
   const handleNavigate = (page: Page) => setActivePage(page);
+
+  // Callback to update user preferences locally
+  const handleUpdateUser = (updates: Partial<User>) => {
+    if (currentUser) {
+      setCurrentUser({ ...currentUser, ...updates });
+    }
+  };
 
   // Helper for Access Denied View
   const AccessDeniedView = () => (
@@ -240,6 +286,7 @@ function SalesFlowApp() {
 
   return (
     <div className={`min-h-screen ${isDarkMode ? 'dark' : ''}`}>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200 overflow-hidden">
 
         <Sidebar
@@ -290,6 +337,9 @@ function SalesFlowApp() {
                   userName={currentUser.name}
                   centerType={effectiveUser?.center_type}
                   onNavigate={(page) => setActivePage(page as Page)}
+                  orgId={effectiveOrgId}
+                  userId={currentUser.id}
+                  userRole={currentUser.role}
                 />
               )
             ) : activePage === 'leads' ? (
@@ -309,6 +359,7 @@ function SalesFlowApp() {
                 user={currentUser}
                 onLogout={handleLogout}
                 toggleTheme={toggleTheme}
+                onUpdateUser={handleUpdateUser}
               />
             ) : activePage === 'tasks' ? (
               <TasksDashboard
@@ -383,7 +434,6 @@ function SalesFlowApp() {
 }
 
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
-import { AcceptInvitationPage } from './components/Auth/AcceptInvitationPage';
 
 // Wrapper to check if we're on invite route
 function AppRoutes() {
@@ -405,15 +455,17 @@ function AppRoutes() {
 // Global Provider Wrapper
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/invite/:token" element={<AcceptInvitationPage />} />
-        <Route path="*" element={
-          <CallProvider>
-            <SalesFlowApp />
-          </CallProvider>
-        } />
-      </Routes>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/invite/:token" element={<AcceptInvitationPage />} />
+          <Route path="*" element={
+            <CallProvider>
+              <SalesFlowApp />
+            </CallProvider>
+          } />
+        </Routes>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
