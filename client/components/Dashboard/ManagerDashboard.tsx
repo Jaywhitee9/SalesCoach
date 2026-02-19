@@ -600,7 +600,7 @@ const ManagerDashboardInner: React.FC<ManagerDashboardProps> = ({ isDarkMode, or
                       <div key={index} className="flex items-center gap-3">
                         <span className="w-16 text-[12px] font-medium truncate text-right shrink-0" style={{ color: '#64748b' }}>{stage.name}</span>
                         <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: '#e5e7eb' }}>
-                          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${(stage.value / maxPipelineValue) * 100}%`, backgroundColor: '#6366f1', opacity: 0.6 + (index * 0.1) }} />
+                          <div className="h-full rounded-full transition-all duration-700" style={{ width: `${(stage.value / maxPipelineValue) * 100}%`, backgroundColor: stage.color || '#6366f1', opacity: stage.color ? 1 : 0.6 + (index * 0.1) }} />
                         </div>
                         <span className="text-[12px] font-semibold w-14 text-left shrink-0 ltr" style={{ color: '#334155', fontVariantNumeric: 'tabular-nums' }}>₪{(stage.value / 1000).toLocaleString()}k</span>
                       </div>

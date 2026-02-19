@@ -6,6 +6,7 @@ import {
 import { Button } from '../Common/Button';
 import { Badge } from '../Common/Badge';
 import { useLeadActivities, LeadActivity } from '../../src/hooks/useLeadActivities';
+import { useOrganizationSettings, PipelineStatus } from '../../src/hooks/useOrganizationSettings';
 
 // Type for the updateLead function
 type UpdateLeadFn = (leadId: string, updates: Partial<Lead>) => Promise<{ success: boolean }>;
@@ -24,9 +25,11 @@ interface LeadDrawerProps {
    updateLead: UpdateLeadFn;
    generateAiScore?: GenerateAiScoreFn;
    teamMembers?: TeamMember[];
+   orgId?: string;
 }
 
-export const LeadDrawer: React.FC<LeadDrawerProps> = ({ lead, onClose, updateLead, generateAiScore, teamMembers = [] }) => {
+export const LeadDrawer: React.FC<LeadDrawerProps> = ({ lead, onClose, updateLead, generateAiScore, teamMembers = [], orgId }) => {
+   const { settings } = useOrganizationSettings(orgId);
    const [activeTab, setActiveTab] = useState<'overview' | 'activity' | 'history' | 'ai'>('overview');
    const [isScoreTooltipOpen, setIsScoreTooltipOpen] = useState(false);
    const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -226,18 +229,33 @@ export const LeadDrawer: React.FC<LeadDrawerProps> = ({ lead, onClose, updateLea
 
    // -- Render Helpers --
    // -- Render Helpers --
+   // -- Render Helpers --
+   const getStatusConfig = (statusId: string) => {
+      if (!settings?.pipeline_statuses) return null;
+      return settings.pipeline_statuses.find(s => s.id === statusId || s.label === statusId);
+   };
+
    const getStatusColor = (status: string) => {
+      // Return custom color object or fallbacks for Badge variant
+      // Since Badge supports style prop now, we return null for variant if we have custom color
+      // But here we return the color string itself for consumption
+      const config = getStatusConfig(status);
+      if (config?.color) return config.color;
+
       switch (status) {
-         case 'New': return 'success';
-         case 'Discovery': return 'brand';
-         case 'Negotiation': return 'warning';
-         case 'Closed': return 'neutral';
-         case 'Proposal': return 'brand';
-         default: return 'neutral';
+         case 'New': return '#10B981'; // emerald-500
+         case 'Discovery': return '#8B5CF6'; // violet-500
+         case 'Negotiation': return '#F59E0B'; // amber-500
+         case 'Closed': return '#10B981'; // emerald-500
+         case 'Proposal': return '#3B82F6'; // blue-500
+         default: return '#64748B'; // slate-500
       }
    };
 
    const getStatusLabel = (status: string) => {
+      const config = getStatusConfig(status);
+      if (config) return config.label;
+
       switch (status) {
          case 'New': return 'ליד חדש';
          case 'Discovery': return 'גילוי צרכים';
@@ -380,7 +398,17 @@ export const LeadDrawer: React.FC<LeadDrawerProps> = ({ lead, onClose, updateLea
                <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-6 gap-x-8">
                   <div>
                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">סטטוס</span>
-                     <Badge variant={getStatusColor(lead.status) as any} className="text-xs px-3 py-1">{getStatusLabel(lead.status)}</Badge>
+                     <Badge
+                        variant="neutral"
+                        className="text-xs px-3 py-1"
+                        style={{
+                           backgroundColor: `${getStatusColor(lead.status)}20`,
+                           color: getStatusColor(lead.status),
+                           borderColor: `${getStatusColor(lead.status)}40`
+                        }}
+                     >
+                        {getStatusLabel(lead.status)}
+                     </Badge>
                   </div>
                   <div>
                      <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">מקור הגעה</span>
@@ -1153,6 +1181,7 @@ export const LeadDrawer: React.FC<LeadDrawerProps> = ({ lead, onClose, updateLea
                                  onChange={(e) => setEditForm({ ...editForm, company: e.target.value })}
                                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-brand-500"
                               />
+                              ```
                            </div>
 
                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1164,11 +1193,19 @@ export const LeadDrawer: React.FC<LeadDrawerProps> = ({ lead, onClose, updateLea
                                        onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
                                        className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm appearance-none outline-none focus:ring-2 focus:ring-brand-500"
                                     >
-                                       <option value="New">ליד חדש</option>
-                                       <option value="Discovery">גילוי צרכים</option>
-                                       <option value="Negotiation">משא ומתן</option>
-                                       <option value="Proposal">הצעת מחיר</option>
-                                       <option value="Closed">סגור</option>
+                                       {settings?.pipeline_statuses ? (
+                                          settings.pipeline_statuses.map(status => (
+                                             <option key={status.id} value={status.id}>{status.label}</option>
+                                          ))
+                                       ) : (
+                                          <>
+                                             <option value="New">ליד חדש</option>
+                                             <option value="Discovery">גילוי צרכים</option>
+                                             <option value="Negotiation">משא ומתן</option>
+                                             <option value="Proposal">הצעת מחיר</option>
+                                             <option value="Closed">סגור</option>
+                                          </>
+                                       )}
                                     </select>
                                     <ChevronDown className="absolute left-3 top-3 w-4 h-4 text-slate-400 pointer-events-none" />
                                  </div>

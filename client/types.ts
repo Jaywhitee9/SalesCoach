@@ -8,6 +8,12 @@ export interface User {
   email?: string;
   organization_id?: string;
   center_type?: 'sales' | 'support';
+  preferences?: {
+    darkMode?: boolean;
+    leadNotifications?: boolean;
+    language?: string;
+    timezone?: string;
+  };
 }
 
 export type UserRole = 'rep' | 'manager' | 'super_admin';
@@ -18,7 +24,7 @@ export interface Lead {
   company: string;
   phone: string;
   email: string;
-  status: 'New' | 'Follow Up' | 'Closed' | 'Negotiation' | 'Discovery' | 'Proposal';
+  status: string;
   priority: 'Hot' | 'Warm' | 'Cold';
   value: string;
   // New fields for Leads Dashboard

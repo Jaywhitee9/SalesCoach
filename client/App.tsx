@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
+import { Toast } from './components/Common/Toast';
 import { Sidebar } from './components/Layout/Sidebar';
 import { TopBar } from './components/Layout/TopBar';
 import { EmptyCallState } from './components/Call/EmptyCallState';
@@ -38,14 +39,19 @@ function SalesFlowApp() {
   const [isDarkMode, setIsDarkMode] = useState(() => {
     // Check localStorage or system preference on init
     if (typeof window !== 'undefined') {
-      // FORCE WHITE MODE DEFAULT
-      // Ignore localStorage for now to guarantee white mode
+      const stored = localStorage.getItem('isDarkMode');
+      // If stored in localStorage, respect it (it might be set from DB sync previously)
+      if (stored) return JSON.parse(stored);
+
+      // Default false
       document.documentElement.classList.remove('dark');
       return false;
     }
     document.documentElement.classList.remove('dark');
     return false;
   });
+
+  const [toast, setToast] = useState<{ message: string, type: 'success' | 'error' | 'info' | 'warning' } | null>(null);
 
   const toggleTheme = () => {
     setIsDarkMode((prev: boolean) => {
@@ -62,7 +68,6 @@ function SalesFlowApp() {
 
   // Sync on mount and change
   useEffect(() => {
-    console.log('[Theme] isDarkMode changed to:', isDarkMode);
     if (isDarkMode) {
       document.documentElement.classList.add('dark');
     } else {
@@ -137,11 +142,17 @@ function SalesFlowApp() {
               role: profile.role, // Important for Admin check
               type: profile.role === 'platform_admin' ? 'super_admin' : profile.role, // Map to new design types
               organization_id: profile.organization_id,
-              center_type: (Array.isArray(profile.organization) ? profile.organization[0]?.center_type : profile.organization?.center_type) || 'sales'
+              center_type: (Array.isArray(profile.organization) ? profile.organization[0]?.center_type : profile.organization?.center_type) || 'sales',
+              preferences: profile.preferences // Load preferences
             } as User;
 
             setCurrentUser(userWithCenterType);
             setIsAuthenticated(true);
+
+            // Apply Dark Mode Preference if exists
+            if (userWithCenterType.preferences?.darkMode !== undefined) {
+              setIsDarkMode(userWithCenterType.preferences.darkMode);
+            }
           }
         }
       } catch (e: any) {
@@ -162,6 +173,34 @@ function SalesFlowApp() {
     });
     return () => subscription.unsubscribe();
   }, []);
+
+  // --- REALTIME NOTIFICATIONS ---
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Listen for new leads assigned to me
+    const channel = supabase.channel('public:leads:notifications')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'leads' },
+        (payload) => {
+          // Check if I am the owner
+          if (payload.new.owner_id === currentUser.id) {
+            // Check if notifications are enabled (default true)
+            const enabled = currentUser.preferences?.leadNotifications ?? true;
+            if (enabled) {
+              setToast({ message: `🔔 התקבל ליד חדש: ${payload.new.name || 'ללא שם'}`, type: 'success' });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentUser]); // Re-subscribe if currentUser changes (e.g. preferences update)
+
 
   // --- TWILIO DEVICE ---
   // Defer initialization until first user interaction to avoid AudioContext warning
@@ -196,6 +235,10 @@ function SalesFlowApp() {
     setCurrentUser(user);
     setIsAuthenticated(true);
     setActivePage('dashboard');
+    // Apply preferences on login
+    if (user.preferences?.darkMode !== undefined) {
+      setIsDarkMode(user.preferences.darkMode);
+    }
   };
 
   const handleLogout = async () => {
@@ -205,6 +248,13 @@ function SalesFlowApp() {
   };
 
   const handleNavigate = (page: Page) => setActivePage(page);
+
+  // Callback to update user preferences locally
+  const handleUpdateUser = (updates: Partial<User>) => {
+    if (currentUser) {
+      setCurrentUser({ ...currentUser, ...updates });
+    }
+  };
 
   // Helper for Access Denied View
   const AccessDeniedView = () => (
@@ -240,6 +290,7 @@ function SalesFlowApp() {
 
   return (
     <div className={`min-h-screen ${isDarkMode ? 'dark' : ''}`}>
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200 overflow-hidden">
 
         <Sidebar
@@ -290,6 +341,9 @@ function SalesFlowApp() {
                   userName={currentUser.name}
                   centerType={effectiveUser?.center_type}
                   onNavigate={(page) => setActivePage(page as Page)}
+                  orgId={effectiveOrgId}
+                  userId={currentUser.id}
+                  userRole={currentUser.role}
                 />
               )
             ) : activePage === 'leads' ? (
@@ -309,6 +363,7 @@ function SalesFlowApp() {
                 user={currentUser}
                 onLogout={handleLogout}
                 toggleTheme={toggleTheme}
+                onUpdateUser={handleUpdateUser}
               />
             ) : activePage === 'tasks' ? (
               <TasksDashboard

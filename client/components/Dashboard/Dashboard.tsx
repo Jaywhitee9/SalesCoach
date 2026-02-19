@@ -35,9 +35,12 @@ interface DashboardProps {
   onNavigate?: (page: string) => void;
   userName?: string;
   centerType?: 'sales' | 'support';
+  orgId?: string;
+  userId?: string;
+  userRole?: string;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ onStartCall, isDarkMode, onNavigate, userName, centerType = 'sales' }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ onStartCall, isDarkMode, onNavigate, userName, centerType = 'sales', orgId, userId, userRole }) => {
   // Helper for greeting based on Israel time
   const getGreeting = () => {
     const hour = new Date().getHours(); // Uses client's local time (assuming user is in context)
@@ -56,7 +59,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartCall, isDarkMode, o
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const navigate = useNavigate();
 
-  const { leads, loading: leadsLoading } = useLeads();
+  const { leads, loading: leadsLoading, updateLead } = useLeads(undefined, orgId, userId, userRole);
   const { tasks = [], toggleTask, addTask, loading: tasksLoading } = useTasks();
 
   // Tasks Filter - now includes 'overdue' option
@@ -149,7 +152,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartCall, isDarkMode, o
     const fetchStats = async () => {
       setStatsLoading(true);
       try {
-        const res = await fetch(`/api/stats/daily?range=${timeRange}`);
+        // Get auth token for user-level filtering
+        const { data: { session } } = await (await import('../../src/lib/supabaseClient')).supabase.auth.getSession();
+        const headers: Record<string, string> = {};
+        if (session?.access_token) {
+          headers['Authorization'] = `Bearer ${session.access_token}`;
+        }
+
+        const res = await fetch(`/api/stats/daily?range=${timeRange}`, { headers });
         const json = await res.json();
         if (json.success) {
           setRealStats(json.stats);
@@ -887,7 +897,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onStartCall, isDarkMode, o
 
       </div>
 
-      <LeadDrawer lead={selectedLead} onClose={() => setSelectedLead(null)} />
+      <LeadDrawer lead={selectedLead} onClose={() => setSelectedLead(null)} updateLead={updateLead} />
 
     </div>
   );

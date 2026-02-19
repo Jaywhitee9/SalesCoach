@@ -19,9 +19,11 @@ interface NewLeadDrawerProps {
   onSave: (lead: Partial<Lead>) => Promise<void>;
   initialData?: Partial<Lead>;
   teamMembers?: TeamMember[];
+  statuses?: { id: string; label: string; color: string }[];
+  currentUserId?: string; // The logged-in user's ID
 }
 
-export const NewLeadDrawer: React.FC<NewLeadDrawerProps> = ({ isOpen, onClose, onSave, initialData, teamMembers = [] }) => {
+export const NewLeadDrawer: React.FC<NewLeadDrawerProps> = ({ isOpen, onClose, onSave, initialData, teamMembers = [], statuses = [], currentUserId }) => {
   const [formData, setFormData] = useState({
     name: '',
     company: '',
@@ -45,9 +47,9 @@ export const NewLeadDrawer: React.FC<NewLeadDrawerProps> = ({ isOpen, onClose, o
       setFormData({
         name: initialData?.name || '',
         company: initialData?.company || '',
-        status: (initialData?.status as string) || 'New',
+        status: (initialData?.status as string) || (statuses && statuses.length > 0 ? statuses[0].id : 'New'),
         source: initialData?.source || 'Website',
-        ownerId: initialData?.owner?.id || (teamMembers.length > 0 ? teamMembers[0].id : ''),
+        ownerId: initialData?.owner?.id || currentUserId || (teamMembers.length > 0 ? teamMembers[0].id : ''),
         phone: initialData?.phone || '',
         email: initialData?.email || '',
         website: (initialData as any)?.website || '',
@@ -199,11 +201,19 @@ export const NewLeadDrawer: React.FC<NewLeadDrawerProps> = ({ isOpen, onClose, o
                       onChange={(e) => handleChange('status', e.target.value)}
                       className="w-full px-3 py-2 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded-lg text-sm focus:ring-2 focus:ring-brand-500 outline-none appearance-none"
                     >
-                      <option value="New">ליד חדש</option>
-                      <option value="Discovery">גילוי צרכים</option>
-                      <option value="Negotiation">מו"מ</option>
-                      <option value="Proposal">הצעת מחיר</option>
-                      <option value="Closed">סגור</option>
+                      {statuses && statuses.length > 0 ? (
+                        statuses.map(status => (
+                          <option key={status.id} value={status.id}>{status.label}</option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="New">ליד חדש</option>
+                          <option value="Discovery">גילוי צרכים</option>
+                          <option value="Negotiation">מו"מ</option>
+                          <option value="Proposal">הצעת מחיר</option>
+                          <option value="Closed">סגור</option>
+                        </>
+                      )}
                     </select>
                     <ChevronDown className="absolute top-3 left-3 w-4 h-4 text-slate-400 pointer-events-none" />
                   </div>

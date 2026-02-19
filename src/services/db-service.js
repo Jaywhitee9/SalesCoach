@@ -356,7 +356,7 @@ class DBService {
     }
 
     // Get statistics for KPIs with time range support
-    async getStats(timeRange = 'day', organizationId = null) {
+    async getStats(timeRange = 'day', organizationId = null, userId = null) {
         const now = new Date();
         let startDate = new Date();
 
@@ -373,43 +373,45 @@ class DBService {
 
         const startISO = startDate.toISOString();
 
+        console.log('[DEBUG-STATS] Range:', timeRange);
+        console.log('[DEBUG-STATS] StartISO:', startISO);
+        console.log('[DEBUG-STATS] UserId:', userId);
+        console.log('[DEBUG-STATS] OrgId:', organizationId);
+
         try {
-            // Get calls for the period
+            // Parallel fetch for better performance - fetch all data at once
+            const queries = [];
+
+            // Query 1: Get calls for the period (only needed columns)
             let callsQuery = supabase
                 .from('calls')
-                .select('id, duration, status')
+                .select('duration, status', { count: 'exact' })
                 .gte('created_at', startISO);
 
             if (organizationId) {
                 callsQuery = callsQuery.eq('organization_id', organizationId);
             }
+            if (userId) {
+                // FIXED: Column is 'agent_id', not 'user_id'
+                callsQuery = callsQuery.eq('agent_id', userId);
+            }
+            queries.push(callsQuery);
 
-            const { data: calls, error: callsError } = await callsQuery;
-
-            // Filter leads by organization if orgId is provided
-            // Note: Ideally calls would have organization_id. 
-            // If not, we rely on implicit RLS or we must fetch agent IDs.
-            // For now, let's assume calls might have organization_id based on recent updates or skip strictly if not present 
-            // BUT leads MUST be filtered.
-
-
-            if (callsError) throw callsError;
-
-            // Get leads created in the period
+            // Query 2: Get leads count (only count, no data needed)
             let leadsQuery = supabase
                 .from('leads')
-                .select('id')
+                .select('id', { count: 'exact', head: false })
                 .gte('created_at', startISO);
 
             if (organizationId) {
                 leadsQuery = leadsQuery.eq('organization_id', organizationId);
             }
+            if (userId) {
+                leadsQuery = leadsQuery.eq('owner_id', userId);
+            }
+            queries.push(leadsQuery);
 
-            const { data: leads, error: leadsError } = await leadsQuery;
-
-            if (leadsError) throw leadsError;
-
-            // Get call summaries for quality score and appointments
+            // Query 3: Get call summaries for quality score and appointments
             let summariesQuery = supabase
                 .from('call_summaries')
                 .select('score, successful')
@@ -418,8 +420,21 @@ class DBService {
             if (organizationId) {
                 summariesQuery = summariesQuery.eq('organization_id', organizationId);
             }
+            // TODO: Add agent filtering for summaries (needs join with calls or agent_id column)
+            // if (userId) {
+            //    summariesQuery = summariesQuery.eq('user_id', userId); 
+            // }
+            queries.push(summariesQuery);
 
-            const { data: summaries, error: summariesError } = await summariesQuery;
+            // Execute all queries in parallel for faster results
+            const [
+                { data: calls, error: callsError },
+                { data: leads, error: leadsError },
+                { data: summaries }
+            ] = await Promise.all(queries);
+
+            if (callsError) throw callsError;
+            if (leadsError) throw leadsError;
 
             // Calculate stats
             const totalCalls = calls?.length || 0;
@@ -772,10 +787,10 @@ class DBService {
             // Calculate previous period for trend comparison
             let previousStartDate = new Date(startDate);
             let previousEndDate = new Date(startDate);
-            
+
             const daysDiff = Math.ceil((now - startDate) / (1000 * 60 * 60 * 24));
             previousStartDate.setDate(previousStartDate.getDate() - daysDiff);
-            
+
             const previousStartISO = previousStartDate.toISOString();
             const previousEndISO = startDate.toISOString();
 
@@ -785,7 +800,7 @@ class DBService {
                 .select('id', { count: 'exact' })
                 .gte('created_at', previousStartISO)
                 .lte('created_at', previousEndISO);
-            
+
             if (userId) prevCallsQuery = prevCallsQuery.eq('agent_id', userId);
             else if (organizationId) prevCallsQuery = prevCallsQuery.eq('organization_id', organizationId);
 
@@ -794,7 +809,7 @@ class DBService {
                 .select('id', { count: 'exact' })
                 .gte('created_at', previousStartISO)
                 .lte('created_at', previousEndISO);
-            
+
             if (userId) prevLeadsQuery = prevLeadsQuery.eq('owner_id', userId);
             else if (organizationId) prevLeadsQuery = prevLeadsQuery.eq('organization_id', organizationId);
 
@@ -804,7 +819,7 @@ class DBService {
                 .or('status.ilike.%appointment%,status.ilike.%meeting%,status.eq.Discovery')
                 .gte('created_at', previousStartISO)
                 .lte('created_at', previousEndISO);
-            
+
             if (userId) prevApptQuery = prevApptQuery.eq('owner_id', userId);
             else if (organizationId) prevApptQuery = prevApptQuery.eq('organization_id', organizationId);
 
@@ -814,7 +829,7 @@ class DBService {
                 .eq('status', 'Closed')
                 .gte('created_at', previousStartISO)
                 .lte('created_at', previousEndISO);
-            
+
             if (userId) prevDealsQuery = prevDealsQuery.eq('owner_id', userId);
             else if (organizationId) prevDealsQuery = prevDealsQuery.eq('organization_id', organizationId);
 
@@ -882,10 +897,47 @@ class DBService {
 
     async getPipelineFunnel(userId, timeRange = 'month', organizationId) {
         try {
-            // Simplified funnel logic: Count leads by status
-            // Stages: New (Lead) -> Discovery (Contact) -> Proposal/Meeting -> Negotiation -> Closed
+            // 1. Fetch Organization Settings for Stages
+            const settings = await this.getOrganizationSettings(organizationId);
 
-            let query = supabase.from('leads').select('status, value');
+            console.log('[DEBUG-FUNNEL] OrgId:', organizationId);
+            console.log('[DEBUG-FUNNEL] Settings Found:', !!settings);
+            console.log('[DEBUG-FUNNEL] Pipeline Statuses:', settings?.pipeline_statuses?.length);
+
+            // Determine active stages configuration
+            // Priority: pipeline_statuses (objects with id, label, color) -> stages_config (strings) -> Defaults
+            let stages = [];
+
+            if (settings?.pipeline_statuses && Array.isArray(settings.pipeline_statuses) && settings.pipeline_statuses.length > 0) {
+                stages = settings.pipeline_statuses;
+                console.log('[DEBUG-FUNNEL] Using Custom Pipeline Statuses');
+                console.log('[DEBUG-FUNNEL] First Stage Sample:', JSON.stringify(stages[0], null, 2));
+            } else if (settings?.stages_config && Array.isArray(settings.stages_config) && settings.stages_config.length > 0) {
+                // Map string config to object structure
+                // Assume string is both ID and Label for legacy/simple configs
+                stages = settings.stages_config.map((s, i) => ({
+                    id: s,
+                    label: s,
+                    color: ['#6366f1', '#8b5cf6', '#10b981', '#f59e0b', '#059669'][i % 5]
+                }));
+                console.log('[DEBUG-FUNNEL] Using Legacy Stages Config');
+            } else {
+                // Hard Fallback
+                console.log('[DEBUG-FUNNEL] Using Hardcoded Fallback');
+                stages = [
+                    { id: 'New', label: 'ליד חדש', color: '#3B82F6' },
+                    { id: 'Discovery', label: 'גילוי צרכים', color: '#8B5CF6' },
+                    { id: 'Proposal', label: 'הצעת מחיר', color: '#10B981' },
+                    { id: 'Negotiation', label: 'משא ומתן', color: '#EC4899' },
+                    { id: 'Closed', label: 'סגור', color: '#059669' }
+                ];
+            }
+
+            // Optimized query: only select needed columns (status, value)
+            let query = supabase
+                .from('leads')
+                .select('status, value', { count: 'exact' });
+
             if (userId) query = query.eq('owner_id', userId);
             else if (organizationId) query = query.eq('organization_id', organizationId);
 
@@ -906,57 +958,96 @@ class DBService {
             }
 
             if (startDate) {
-                // For funnel, we usually care about leads ACTIVE or CREATED in the period.
-                // Strict interpretation: Created in period.
                 query = query.gte('created_at', startDate);
             }
 
+            // Execute optimized query (will use idx_leads_org_created_status index)
             const { data: leads, error } = await query;
             if (error) throw error;
 
-            const counts = {
-                'New': 0,
-                'Discovery': 0,
-                'Proposal': 0,
-                'Negotiation': 0,
-                'Closed': 0
-            };
+            // Initialize counts
+            const counts = {};
+            const values = {};
 
-            const values = { ...counts };
+            // Map by ID for easy lookup
+            stages.forEach(stage => {
+                counts[stage.id] = 0;
+                values[stage.id] = 0;
+            });
+
+            // Allow for legacy mapping if needed (English ID -> Hebrew Label in config?)
+            // If the config uses 'New' as ID, and lead has 'New', it works.
+            // If config uses 'status_123' and lead has 'status_123', it works.
+            // Be tolerant of 'Closed' if not in stages but commonly exists.
 
             leads.forEach(l => {
-                const s = l.status || 'New';
-                // Map custom statuses to standard buckets if needed
-                let bucket = 'New';
-                if (['New', 'חדש'].includes(s)) bucket = 'New';
-                else if (['Discovery', 'Contacted', 'Qualified'].includes(s)) bucket = 'Discovery';
-                else if (['Proposal', 'Quote', 'Meeting', 'Scheduled'].includes(s)) bucket = 'Proposal';
-                else if (['Negotiation', 'Contract'].includes(s)) bucket = 'Negotiation';
-                else if (['Closed', 'Won'].includes(s)) bucket = 'Closed';
+                const s = l.status; // This is the ID stored in DB
 
-                counts[bucket] = (counts[bucket] || 0) + 1;
-                values[bucket] = (values[bucket] || 0) + (l.value || 0);
+                // Direct Match
+                if (counts.hasOwnProperty(s)) {
+                    counts[s]++;
+                    values[s] += (l.value || 0);
+                } else {
+                    // Fallback Logic
+                    // 1. Try to match by Label if ID failed (legacy data might store label)
+                    const stageByLabel = stages.find(st => st.label === s || st.label === l.status);
+                    if (stageByLabel) {
+                        counts[stageByLabel.id]++;
+                        values[stageByLabel.id] += (l.value || 0);
+                    } else if (['New', 'חדש', null, undefined].includes(s)) {
+                        // Default to first stage
+                        if (stages.length > 0) {
+                            const first = stages[0].id;
+                            counts[first]++;
+                            values[first] += (l.value || 0);
+                        }
+                    } else if (['Closed', 'Won', 'סגור'].includes(s)) {
+                        // If 'Closed' isn't a defined stage ID, try to find the last stage?
+                        // Or just ignore if not in funnel?
+                        // Let's try to find a stage with 'Closed' in ID or Label
+                        const closedStage = stages.find(st => st.id === 'Closed' || st.label.includes('סגור') || st.label.includes('Closed'));
+                        if (closedStage) {
+                            counts[closedStage.id]++;
+                            values[closedStage.id] += (l.value || 0);
+                        }
+                    }
+                    // Else: Unknown status, maybe "Lost" or "Archived". Exclude from funnel or map to "Other"?
+                    // Current behavior: Exclude.
+                }
             });
 
             // Conversion helper
             const total = leads.length || 1;
 
-            return [
-                { id: 'f1', label: 'ליד חדש', count: counts['New'], totalValue: values['New'], percentage: 100, conversionRate: 100, color: '#6366f1' },
-                { id: 'f2', label: 'גילוי צרכים', count: counts['Discovery'], totalValue: values['Discovery'], percentage: Math.round((counts['Discovery'] / total) * 100), conversionRate: 0, color: '#4f46e5' },
-                { id: 'f3', label: 'הצעת מחיר', count: counts['Proposal'], totalValue: values['Proposal'], percentage: Math.round((counts['Proposal'] / total) * 100), conversionRate: 0, color: '#4338ca' },
-                { id: 'f4', label: 'משא ומתן', count: counts['Negotiation'], totalValue: values['Negotiation'], percentage: Math.round((counts['Negotiation'] / total) * 100), conversionRate: 0, color: '#3730a3' },
-                { id: 'f5', label: 'סגירה', count: counts['Closed'], totalValue: values['Closed'], percentage: Math.round((counts['Closed'] / total) * 100), conversionRate: 0, color: '#312e81' },
-            ].map((stage, idx, arr) => {
-                const max = Math.max(...arr.map(s => s.count)) || 1;
-                stage.percentage = Math.round((stage.count / max) * 100);
+            return stages.map((stage, idx, arr) => {
+                const count = counts[stage.id] || 0;
+                const value = values[stage.id] || 0;
 
+                // Visual Percentage
+                const maxCount = Math.max(...Object.values(counts)) || 1;
+                const percentage = Math.round((count / maxCount) * 100);
+
+                // Conversion Rate
+                let conversionRate = 0;
                 if (idx > 0) {
-                    const prev = arr[idx - 1].count;
-                    stage.conversionRate = prev > 0 ? Math.round((stage.count / prev) * 100) : 0;
+                    const prevStage = arr[idx - 1];
+                    const prevCount = counts[prevStage.id] || 0;
+                    conversionRate = prevCount > 0 ? Math.round((count / prevCount) * 100) : 0;
+                } else {
+                    conversionRate = 100;
                 }
-                return stage;
+
+                return {
+                    id: stage.id, // Use the actual Stage ID
+                    label: stage.label,
+                    count: count,
+                    totalValue: value,
+                    percentage: percentage,
+                    conversionRate: conversionRate,
+                    color: stage.color || '#6366f1' // Use custom color
+                };
             });
+
         } catch (err) {
             console.error('[DB] Funnel Error:', err);
             return [];
@@ -1185,7 +1276,7 @@ class DBService {
             // OPTIMIZED: Build performance array without additional queries
             const performance = members.map(member => {
                 const dealStats = dealsMap[member.id] || { count: 0, revenue: 0 };
-                
+
                 return {
                     id: member.id,
                     name: member.full_name || 'Unknown',
@@ -1202,7 +1293,7 @@ class DBService {
             performance.sort((a, b) => b.revenue - a.revenue);
 
             const result = { success: true, performance };
-            
+
             // OPTIMIZED: Store in cache for 30 seconds
             dashboardCache.set(cacheKey, result, 30);
 
@@ -1382,7 +1473,7 @@ class DBService {
             insights.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
 
             const result = { success: true, insights: insights.slice(0, 4) }; // Max 4 insights
-            
+
             // OPTIMIZED: Store in cache for 30 seconds
             dashboardCache.set(cacheKey, result, 30);
 
@@ -2395,12 +2486,12 @@ class DBService {
                 .limit(1000);
 
             if (error || !calls || calls.length === 0) {
-                return { 
-                    topPains: [], 
-                    topObjections: [], 
-                    topGaps: [], 
+                return {
+                    topPains: [],
+                    topObjections: [],
+                    topGaps: [],
                     topVisions: [],
-                    totalCalls: 0 
+                    totalCalls: 0
                 };
             }
 
@@ -2489,12 +2580,12 @@ class DBService {
             };
         } catch (err) {
             console.error('[DB] getSignalsAnalytics error:', err.message);
-            return { 
-                topPains: [], 
-                topObjections: [], 
-                topGaps: [], 
+            return {
+                topPains: [],
+                topObjections: [],
+                topGaps: [],
                 topVisions: [],
-                totalCalls: 0 
+                totalCalls: 0
             };
         }
     }

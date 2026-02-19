@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   User,
   Users,
+  UserPlus,
   Phone,
   Plug,
   Bell,
@@ -42,6 +43,7 @@ import { CampaignSettings } from './CampaignSettings';
 import { SettingsCalls } from './SettingsCalls';
 import { WebhookSettings } from './WebhookSettings';
 import { KnowledgeBase } from './KnowledgeBase';
+import { LeadDistributionSettings } from './LeadDistributionSettings';
 import { Button } from '../Common/Button';
 import { Badge } from '../Common/Badge';
 import { SYSTEM_HEALTH_DATA } from '../../constants';
@@ -68,7 +70,44 @@ interface TeamMember {
 // 1. Profile & Account
 const SettingsProfile = ({ user, isDarkMode, toggleTheme }: { user: UserType; isDarkMode: boolean; toggleTheme: () => void }) => {
   const isRep = user.type === 'rep';
-  const [leadNotif, setLeadNotif] = useState(true);
+  // Initialize from user preferences or default to true
+  const [leadNotif, setLeadNotif] = useState(user.preferences?.leadNotifications ?? true);
+
+  // Helper to save preferences to DB
+  const updatePreferences = async (updates: any) => {
+    try {
+      const currentPrefs = user.preferences || {};
+      const newPrefs = { ...currentPrefs, ...updates };
+
+      const { error } = await supabase
+        .from('profiles')
+        .update({ preferences: newPrefs })
+        .eq('id', user.id);
+
+      if (error) throw error;
+
+      // Update local user object reference if possible, or reliance on reload/context update
+      // For now, we update the local object to reflect change immediately in UI if needed
+      if (user) user.preferences = newPrefs;
+
+    } catch (err) {
+      console.error('Failed to update preferences:', err);
+    }
+  };
+
+  // Wrapper for toggling theme that also saves to DB
+  const handleToggleTheme = () => {
+    toggleTheme();
+    // Save the NEW state (opposite of current isDarkMode)
+    updatePreferences({ darkMode: !isDarkMode });
+  };
+
+  // Wrapper for toggling notifications
+  const handleToggleNotif = () => {
+    const newValue = !leadNotif;
+    setLeadNotif(newValue);
+    updatePreferences({ leadNotifications: newValue });
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -205,7 +244,7 @@ const SettingsProfile = ({ user, isDarkMode, toggleTheme }: { user: UserType; is
               <span className="text-sm text-slate-700 dark:text-slate-300">מצב לילה כברירת מחדל</span>
             </div>
             <div
-              onClick={toggleTheme}
+              onClick={handleToggleTheme}
               className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${isDarkMode ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}`}
             >
               <div className={`absolute top-1 w-3 h-3 bg-white rounded-full shadow-sm transition-all ${isDarkMode ? 'right-1' : 'left-1'}`}></div>
@@ -219,7 +258,7 @@ const SettingsProfile = ({ user, isDarkMode, toggleTheme }: { user: UserType; is
               <span className="text-sm text-slate-700 dark:text-slate-300">התראה על ליד חדש שהוקצה אליי</span>
             </div>
             <div
-              onClick={() => setLeadNotif(!leadNotif)}
+              onClick={handleToggleNotif}
               className={`w-10 h-5 rounded-full relative cursor-pointer transition-colors ${leadNotif ? 'bg-brand-600' : 'bg-slate-300 dark:bg-slate-700'}`}
             >
               <div className={`absolute top-1 w-3 h-3 bg-white rounded-full shadow-sm transition-all ${leadNotif ? 'right-1' : 'left-1'}`}></div>
@@ -1074,6 +1113,7 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ isDarkMode
     { id: 'overview', label: 'סקירת מערכת', icon: Activity },
     { id: 'profile', label: 'פרופיל וחשבון', icon: User },
     { id: 'team', label: 'צוות ותפקידים', icon: Users },
+    { id: 'distribution', label: 'חלוקת לידים', icon: UserPlus },
     { id: 'calls', label: 'שיחות ואימון', icon: Phone },
     { id: 'pipeline', label: 'תהליך מכירה', icon: LayoutTemplate },
     { id: 'campaigns', label: 'קמפיינים', icon: Target },
@@ -1100,6 +1140,7 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ isDarkMode
       case 'overview': return <SettingsOverview setCategory={setActiveCategory} stats={stats} />;
       case 'profile': return <SettingsProfile user={user} isDarkMode={isDarkMode} toggleTheme={toggleTheme} />;
       case 'team': return <SettingsTeam members={teamMembers} />;
+      case 'distribution': return <LeadDistributionSettings orgId={user.organization_id} />;
       case 'calls': return <SettingsCalls user={user} />;
       case 'pipeline': return <PipelineSettings orgId={user.organization_id} />;
       case 'campaigns': return <CampaignSettings />;
@@ -1118,6 +1159,7 @@ export const SettingsDashboard: React.FC<SettingsDashboardProps> = ({ isDarkMode
       case 'overview': return { title: 'סקירת מערכת', desc: 'נהל את סביבת העבודה, הצוות, השיחות והאינטגרציות במקום אחד.' };
       case 'profile': return { title: 'פרופיל וחשבון', desc: 'נהל את הפרטים האישיים, הגדרות האבטחה וההעדפות שלך.' };
       case 'team': return { title: 'צוות ותפקידים', desc: 'נהל את המשתמשים, הצוותים והרשאות הגישה במערכת.' };
+      case 'distribution': return { title: 'חלוקת לידים', desc: 'קבע כיצד לידים חדשים יתחלקו - חלוקה אוטומטית או הקצאה ידנית.' };
       case 'calls': return { title: 'שיחות ואימון', desc: 'הגדר כיצד המערכת מתמללת, מנתחת ומאמנת את הנציגים בזמן אמת.' };
       case 'pipeline': return { title: 'תהליך מכירה', desc: 'הגדר את שלבי ה-Pipeline, סטטוסים וצבעים לניהול לידים.' };
       case 'campaigns': return { title: 'קמפיינים', desc: 'נהל קמפיינים וסנן לידים לפי מקור (דף נחיתה, גוגל, ועוד).' };

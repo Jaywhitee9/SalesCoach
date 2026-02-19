@@ -14,7 +14,8 @@ import {
   TrendingUp,
   Clock,
   ArrowRight,
-  Loader2
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
 import { LeadDrawer } from '../Leads/LeadDrawer';
 import { supabase } from '../../src/lib/supabaseClient';
@@ -33,17 +34,25 @@ const STAGE_GRADIENTS = [
   'linear-gradient(90deg, #10b981 0%, #059669 100%)',
 ];
 
-// ─── Cache ───
+// ─── Simple Cache for Instant Loading ───
+// Cache shows old data instantly while fetching fresh data in background
 const CACHE_KEY = 'pipe_dash';
-const CACHE_TTL = 5 * 60_000;
+const CACHE_MAX_AGE = 5 * 60_000; // 5 minutes max - after that, don't show stale data
 
 const getCachedData = (orgId: string) => {
   try {
     const raw = sessionStorage.getItem(`${CACHE_KEY}_${orgId}`);
     if (!raw) return null;
     const { data, ts } = JSON.parse(raw);
-    if (Date.now() - ts > CACHE_TTL) { sessionStorage.removeItem(`${CACHE_KEY}_${orgId}`); return null; }
-    return data;
+
+    // Don't show data older than 5 minutes
+    const age = Date.now() - ts;
+    if (age > CACHE_MAX_AGE) {
+      sessionStorage.removeItem(`${CACHE_KEY}_${orgId}`);
+      return null;
+    }
+
+    return { data };
   } catch { return null; }
 };
 
@@ -89,6 +98,7 @@ const CardSkeleton: React.FC<{ lines?: number }> = ({ lines = 4 }) => (
 );
 
 export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode, currentUser }) => {
+  useEffect(() => { console.log('PipelineDashboard Loaded - VERSION FIX 2024-10-27'); }, []);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [dateRange, setDateRange] = useState('month');
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
@@ -110,6 +120,59 @@ export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode
   const userType = currentUser?.type || 'manager';
   const isRep = userType === 'rep';
 
+  // Manual refresh function
+  const refreshDashboard = () => {
+    // Clear cache to force fresh data
+    if (currentUser?.organization_id) {
+      sessionStorage.removeItem(`pipe_dash_${currentUser.organization_id}`);
+    }
+    // Increment fetchRef to trigger refetch
+    fetchRef.current++;
+  };
+
+  // Update lead with optimistic UI updates
+  const handleUpdateLead = async (leadId: string, updates: Partial<Lead>) => {
+    try {
+      // Optimistic update: update local state immediately
+      const statusChanged = updates.status !== undefined;
+
+      // Send update to server
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`/api/leads/${leadId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`
+        },
+        body: JSON.stringify(updates)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update lead');
+      }
+
+      console.log('SAVE_LEAD_SUCCESS');
+
+      // Refresh dashboard after successful update (especially if status changed)
+      if (statusChanged) {
+        // Wait a tiny bit for DB to update, then refresh
+        setTimeout(() => {
+          refreshDashboard();
+        }, 300);
+      } else {
+        // For non-status updates, just refresh after a short delay
+        setTimeout(() => {
+          refreshDashboard();
+        }, 500);
+      }
+
+      return response.json();
+    } catch (error) {
+      console.error('Failed to update lead:', error);
+      throw error;
+    }
+  };
+
   // Fetch Team Members (Once)
   useEffect(() => {
     if (isRep || !currentUser?.organization_id) return;
@@ -120,24 +183,34 @@ export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode
     fetchTeam();
   }, [currentUser?.organization_id, isRep]);
 
-  // Data Fetching
+  const [dataVersion, setDataVersion] = useState(0);
+
+  // ─── INSTANT HYDRATION: Load cached data on mount ───
+  useEffect(() => {
+    if (!currentUser?.organization_id) return;
+    const cached = getCachedData(currentUser.organization_id);
+    if (cached?.data) {
+      const d = cached.data;
+      if (d.stats) setStats(d.stats);
+      if (d.funnelData) setFunnelData(d.funnelData);
+      if (d.sourcesData) setSourcesData(d.sourcesData);
+      if (d.atRiskLeads) setAtRiskLeads(d.atRiskLeads);
+      if (d.unassignedLeads) setUnassignedLeads(d.unassignedLeads);
+      setHasData(true); // Skip skeleton entirely!
+      console.log('[Dashboard] Hydrated from cache - instant render');
+    }
+  }, [currentUser?.organization_id]);
+
+  // ─── BACKGROUND REVALIDATION: Fetch fresh data ───
   useEffect(() => {
     if (!currentUser?.organization_id) { setHasData(true); return; }
     const fetchId = ++fetchRef.current;
 
-    // Restore cache instantly
-    const cached = getCachedData(currentUser.organization_id);
-    if (cached) {
-      if (cached.stats) setStats(cached.stats);
-      if (cached.funnelData) setFunnelData(cached.funnelData);
-      if (cached.sourcesData) setSourcesData(cached.sourcesData);
-      if (cached.atRiskLeads) setAtRiskLeads(cached.atRiskLeads);
-      if (cached.unassignedLeads) setUnassignedLeads(cached.unassignedLeads);
-      setHasData(true);
-    }
-
     const fetchData = async () => {
+      if (fetchId !== fetchRef.current) return; // Only proceed if this is the latest fetch request
+
       setIsFetching(true);
+
       try {
         let targetUserId = '';
         if (isRep && currentUser?.id) targetUserId = currentUser.id;
@@ -150,7 +223,7 @@ export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode
         const { data: { session } } = await supabase.auth.getSession();
         const headers = { 'Authorization': `Bearer ${session?.access_token}` };
 
-        // All at once for fastest total time
+        // Parallel Fetching
         const results = await Promise.allSettled([
           fetch(`/api/panel/stats?${rangeParam.substring(1)}${userIdParam}${orgParam}`, { headers }),
           fetch(`/api/pipeline/funnel?${rangeParam.substring(1)}${userIdParam}${orgParam}`, { headers }),
@@ -172,18 +245,21 @@ export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode
         if (riskRes) { const d = await (riskRes as Response).json(); if (d.success) { setAtRiskLeads(d.leads); cachePayload.atRiskLeads = d.leads; } }
         if (unassignedRes) { const d = await (unassignedRes as Response).json(); if (d.success) { setUnassignedLeads(d.leads); cachePayload.unassignedLeads = d.leads; } }
 
+        // Cache the fresh data
         setCachedData(currentUser!.organization_id!, cachePayload);
         setHasData(true);
       } catch (err) {
         console.error('Error fetching pipeline data:', err);
         setHasData(true);
       } finally {
-        setIsFetching(false);
+        if (fetchId === fetchRef.current) {
+          setIsFetching(false);
+        }
       }
     };
 
     fetchData();
-  }, [dateRange, selectedTeam, currentUser?.organization_id, currentUser?.id, isRep]);
+  }, [dateRange, selectedTeam, currentUser?.organization_id, currentUser?.id, isRep, dataVersion]);
 
   // Derived
   const totalSourcesValue = sourcesData.reduce((acc, curr) => acc + (curr[sourceMetric] || 0), 0);
@@ -313,6 +389,18 @@ export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode
                 </>
               )}
             </div>
+
+            {/* Refresh Button */}
+            <button
+              onClick={refreshDashboard}
+              disabled={isFetching}
+              className="flex items-center gap-2 px-3 py-2 rounded-md text-[13px] font-medium transition-all hover:bg-white disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: '#fff', border: '1px solid #e5e7eb', color: '#334155' }}
+              title="רענן נתונים"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} style={{ color: '#94a3b8' }} />
+              <span>רענן</span>
+            </button>
           </div>
         </div>
 
@@ -364,7 +452,9 @@ export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode
               ) : (
                 funnelData.map((stage, index) => {
                   const barWidth = maxFunnelCount > 0 ? Math.max((stage.count / maxFunnelCount) * 100, 3) : 3;
-                  const gradient = STAGE_GRADIENTS[index % STAGE_GRADIENTS.length];
+                  // USE DYNAMIC COLOR from Backend (which comes from Org Settings)
+                  const barColor = stage.color || STAGE_GRADIENTS[index % STAGE_GRADIENTS.length];
+
                   return (
                     <div key={stage.id || index} className="group">
                       <div className="flex items-baseline justify-between mb-2.5">
@@ -375,7 +465,7 @@ export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode
                         </div>
                       </div>
                       <div className="h-7 rounded-md overflow-hidden" style={{ background: '#f1f5f9' }}>
-                        <div className="h-full rounded-md transition-all duration-700 group-hover:brightness-110" style={{ width: `${barWidth}%`, background: gradient }} />
+                        <div className="h-full rounded-md transition-all duration-700 group-hover:brightness-110" style={{ width: `${barWidth}%`, background: barColor }} />
                       </div>
                       {index < funnelData.length - 1 && <div className="mt-4" style={{ height: 1, background: '#e5e7eb', opacity: 0.5 }} />}
                     </div>
@@ -526,7 +616,13 @@ export const PipelineDashboard: React.FC<PipelineDashboardProps> = ({ isDarkMode
           )}
         </div>
 
-        <LeadDrawer lead={selectedLead} onClose={() => setSelectedLead(null)} />
+        <LeadDrawer
+          lead={selectedLead}
+          onClose={() => setSelectedLead(null)}
+          updateLead={handleUpdateLead}
+          teamMembers={teamMembers}
+          orgId={currentUser?.organization_id}
+        />
       </div>
     </div>
   );

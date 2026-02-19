@@ -584,6 +584,7 @@ export const LeadsDashboard: React.FC<LeadsDashboardProps> = ({ isDarkMode, orgI
         updateLead={updateLead}
         generateAiScore={generateAiScore}
         teamMembers={teamMembers}
+        orgId={orgId}
       />
 
       {/* 6. New Lead Drawer (Create) */}
@@ -593,6 +594,8 @@ export const LeadsDashboard: React.FC<LeadsDashboardProps> = ({ isDarkMode, orgI
         onSave={handleSaveNewLead}
         initialData={newLeadInitialData}
         teamMembers={teamMembers}
+        statuses={statusOptions}
+        currentUserId={user?.id}
       />
 
       {/* 7. CSV Import Modal */}

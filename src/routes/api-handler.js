@@ -248,6 +248,7 @@ async function registerApiRoutes(fastify) {
     // GET call history for a specific lead (SECURED: Verifies Org Match)
     fastify.get('/api/calls/lead/:leadId', async (request, reply) => {
         const { leadId } = request.params;
+        console.log('[DEBUG] /api/calls/lead/:leadId HIT - leadId:', leadId);
         const limit = parseInt(request.query.limit) || 50;
 
         try {
@@ -332,8 +333,14 @@ async function registerApiRoutes(fastify) {
     fastify.get('/api/stats/daily', async (request, reply) => {
         try {
             const timeRange = request.query.range || 'day'; // day, week, month
-            const organizationId = request.query.organizationId;
-            const stats = await DBService.getStats(timeRange, organizationId);
+            const organizationId = request.query.organizationId || request.user?.organization_id;
+
+            // For reps, filter by their own userId so they only see their own stats
+            // For managers/admins, show org-wide data (userId = null)
+            const userRole = request.user?.role;
+            const userId = (userRole === 'rep') ? request.user?.id : null;
+
+            const stats = await DBService.getStats(timeRange, organizationId, userId);
             return { success: true, stats };
         } catch (err) {
             console.error('[API] Error fetching stats:', err.message);
@@ -449,6 +456,44 @@ async function registerApiRoutes(fastify) {
             .single();
         return { user, profile };
     }
+
+    // --- LEGACY DASHBOARD SUPPORT (FALLBACK) ---
+    fastify.post('/api/dashboard', async (request, reply) => {
+        try {
+            const { orgId, userId, dateRange, isRep } = request.body;
+            // Basic auth check
+            if (!orgId) return reply.code(400).send({ error: 'Missing orgId' });
+
+            // Verify access (reuse existing logic if possible, or simple check)
+            // We'll skip strict verification here for the fallback to ensure it works, 
+            // relying on the fact that internal services are safe. 
+            // Real security is handled by RLS on DB side anyway if we were querying directly, 
+            // but here we use DBService which uses admin client usually. 
+            // Let's use verifyOrgAccess for safety.
+            if (!(await verifyOrgAccess(request, reply, orgId))) return;
+
+            // Parallel fetch of all data
+            const [stats, funnel, sources, atRisk, unassigned] = await Promise.all([
+                DBService.getPanelStats(userId, dateRange === 'היום' ? 'day' : dateRange === 'שבוע' ? 'week' : 'month', orgId),
+                DBService.getPipelineFunnel(userId, dateRange === 'היום' ? 'day' : dateRange === 'שבוע' ? 'week' : 'month', orgId),
+                DBService.getPipelineSources(userId, dateRange === 'היום' ? 'day' : dateRange === 'שבוע' ? 'week' : 'month', orgId),
+                DBService.getLeadsAtRisk(userId, 48, 5, orgId),
+                !isRep ? DBService.getUnassignedLeads(5, orgId) : Promise.resolve([])
+            ]);
+
+            return {
+                success: true,
+                stats,
+                funnelData: funnel,
+                sourcesData: sources,
+                atRiskLeads: atRisk,
+                unassignedLeads: unassigned
+            };
+        } catch (err) {
+            console.error('[API] Legacy Dashboard Error:', err.message);
+            return reply.code(500).send({ error: 'Failed to fetch dashboard data' });
+        }
+    });
 
     // --- PANEL DASHBOARD ---
 

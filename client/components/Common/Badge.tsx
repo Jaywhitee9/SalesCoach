@@ -1,13 +1,13 @@
-
 import React from 'react';
 
 interface BadgeProps {
   children: React.ReactNode;
   variant?: 'neutral' | 'brand' | 'success' | 'warning' | 'danger' | 'indigo' | 'purple' | 'pink';
   className?: string;
+  style?: React.CSSProperties;
 }
 
-export const Badge: React.FC<BadgeProps> = ({ children, variant = 'neutral', className = '' }) => {
+export const Badge: React.FC<BadgeProps> = ({ children, variant = 'neutral', className = '', style }) => {
   const baseStyles = "inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border border-transparent";
 
   const variants = {
@@ -22,7 +22,7 @@ export const Badge: React.FC<BadgeProps> = ({ children, variant = 'neutral', cla
   };
 
   return (
-    <span className={`${baseStyles} ${variants[variant]} ${className}`}>
+    <span className={`${baseStyles} ${variants[variant]} ${className}`} style={style}>
       {children}
     </span>
   );
