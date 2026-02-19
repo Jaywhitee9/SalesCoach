@@ -102,7 +102,7 @@ async function registerAdminRoutes(fastify) {
             return { success: true, organizations: flatData };
         } catch (err) {
             console.error('[Admin API] Get Organizations Error:', err.message);
-            return reply.code(500).send({ error: err.message });
+            return reply.code(500).send({ error: 'Internal server error' });
         }
     });
 
@@ -141,7 +141,7 @@ async function registerAdminRoutes(fastify) {
             return { success: true, organizationId: data.id };
         } catch (err) {
             console.error('[Admin API] Create Organization Error:', err.message);
-            return reply.code(500).send({ error: err.message });
+            return reply.code(500).send({ error: 'Internal server error' });
         }
     });
 
@@ -166,7 +166,7 @@ async function registerAdminRoutes(fastify) {
             return { success: true, updated: data };
         } catch (err) {
             console.error('[Admin API] Update Plan Error:', err.message);
-            return reply.code(500).send({ error: err.message });
+            return reply.code(500).send({ error: 'Internal server error' });
         }
     });
 
@@ -193,7 +193,7 @@ async function registerAdminRoutes(fastify) {
             return { success: true, ...data };
         } catch (err) {
             console.error('[Admin API] Delete Organization Error:', err.message);
-            return reply.code(500).send({ error: err.message });
+            return reply.code(500).send({ error: 'Internal server error' });
         }
     });
 
@@ -216,7 +216,7 @@ async function registerAdminRoutes(fastify) {
             return { success: true, users: data || [] };
         } catch (err) {
             console.error('[Admin API] Get Org Users Error:', err.message);
-            return reply.code(500).send({ error: err.message });
+            return reply.code(500).send({ error: 'Internal server error' });
         }
     });
 
@@ -251,7 +251,7 @@ async function registerAdminRoutes(fastify) {
             return { success: true, ...data };
         } catch (err) {
             console.error('[Admin API] Delete User Error:', err.message);
-            return reply.code(500).send({ error: err.message });
+            return reply.code(500).send({ error: 'Internal server error' });
         }
     });
 
@@ -270,7 +270,7 @@ async function registerAdminRoutes(fastify) {
             return { success: true, report: data };
         } catch (err) {
             console.error('[Admin API] Isolation Report Error:', err.message);
-            return reply.code(500).send({ error: err.message });
+            return reply.code(500).send({ error: 'Internal server error' });
         }
     });
 
@@ -293,7 +293,7 @@ async function registerAdminRoutes(fastify) {
             return { success: true, logs: data || [] };
         } catch (err) {
             console.error('[Admin API] Audit Log Error:', err.message);
-            return reply.code(500).send({ error: err.message });
+            return reply.code(500).send({ error: 'Internal server error' });
         }
     });
 
@@ -332,7 +332,7 @@ async function registerAdminRoutes(fastify) {
             };
         } catch (err) {
             console.error('[Admin API] Get Phone Config Error:', err.message);
-            return reply.code(500).send({ error: err.message });
+            return reply.code(500).send({ error: 'Internal server error' });
         }
     });
 
@@ -356,7 +356,7 @@ async function registerAdminRoutes(fastify) {
             return { success: true };
         } catch (err) {
             console.error('[Admin API] Update Org Phone Error:', err.message);
-            return reply.code(500).send({ error: err.message });
+            return reply.code(500).send({ error: 'Internal server error' });
         }
     });
 
@@ -391,7 +391,7 @@ async function registerAdminRoutes(fastify) {
             return { success: true };
         } catch (err) {
             console.error('[Admin API] Update User Phone Error:', err.message);
-            return reply.code(500).send({ error: err.message });
+            return reply.code(500).send({ error: 'Internal server error' });
         }
     });
 
@@ -478,7 +478,7 @@ async function registerAdminRoutes(fastify) {
             };
         } catch (err) {
             console.error('[Admin API] Create Invitation Error:', err.message);
-            return reply.code(500).send({ error: err.message });
+            return reply.code(500).send({ error: 'Internal server error' });
         }
     });
 
@@ -509,7 +509,7 @@ async function registerAdminRoutes(fastify) {
             return { success: true, invitations: data || [] };
         } catch (err) {
             console.error('[Admin API] List Invitations Error:', err.message);
-            return reply.code(500).send({ error: err.message });
+            return reply.code(500).send({ error: 'Internal server error' });
         }
     });
 
@@ -529,7 +529,7 @@ async function registerAdminRoutes(fastify) {
             return { success: true, message: 'Invitation cancelled' };
         } catch (err) {
             console.error('[Admin API] Delete Invitation Error:', err.message);
-            return reply.code(500).send({ error: err.message });
+            return reply.code(500).send({ error: 'Internal server error' });
         }
     });
 
@@ -578,7 +578,7 @@ async function registerAdminRoutes(fastify) {
             };
         } catch (err) {
             console.error('[API] Validate Invitation Error:', err.message);
-            return reply.code(500).send({ error: err.message });
+            return reply.code(500).send({ error: 'Internal server error' });
         }
     });
 
@@ -651,7 +651,7 @@ async function registerAdminRoutes(fastify) {
             };
         } catch (err) {
             console.error('[API] Accept Invitation Error:', err.message);
-            return reply.code(500).send({ error: err.message });
+            return reply.code(500).send({ error: 'Internal server error' });
         }
     });
 

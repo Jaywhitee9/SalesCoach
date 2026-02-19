@@ -7,7 +7,7 @@ const supabase = require('../lib/supabase');
 async function authenticate(request, reply) {
     try {
         // 1. Skip public routes (optional: can be handled by caller)
-        const publicRoutes = ['/api/system/health', '/api/stripe/webhook', '/voice', '/ws'];
+        const publicRoutes = ['/api/system/health', '/api/stripe/webhook', '/api/invitations/', '/api/leads/webhook', '/voice', '/ws'];
         if (publicRoutes.some(route => request.url.startsWith(route))) {
             return;
         }
@@ -51,8 +51,7 @@ async function authenticate(request, reply) {
         // console.log(`[Auth] Authenticated user: ${user.email} (${profile?.role})`);
 
     } catch (err) {
-        console.error('[Auth] Middleware error:', err);
-        // Don't crash, just don't authenticate
+        request.log?.error?.({ err }, 'Auth middleware error') || console.error('[Auth] Middleware error:', err.message);
     }
 }
 
