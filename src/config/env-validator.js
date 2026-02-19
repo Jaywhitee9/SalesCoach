@@ -5,7 +5,7 @@
  */
 
 const REQUIRED_VARS = [
-    { name: 'SUPABASE_URL', critical: true },
+    { name: 'SUPABASE_URL', critical: true, aliases: ['VITE_SUPABASE_URL'] },
     { name: 'SUPABASE_SERVICE_ROLE_KEY', critical: true, aliases: ['SUPABASE_SERVICE_KEY'] },
     { name: 'TWILIO_ACCOUNT_SID', critical: false },
     { name: 'TWILIO_AUTH_TOKEN', critical: false },

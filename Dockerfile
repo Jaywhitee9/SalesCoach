@@ -23,5 +23,8 @@ COPY --from=client-builder /app/client/dist ./client/dist
 # Expose port
 EXPOSE 5050
 
+# Set production mode
+ENV NODE_ENV=production
+
 # Start server
 CMD ["npm", "start"]
